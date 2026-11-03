@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { ChevronDown, Reply } from "lucide-react";
 import { Postmark, Stamp, SENDER_TEXT } from "./Postal";
 import { useToast } from "./Toast";
+import { TRIGGER_LABEL } from "./postman/labels";
 import { fmtCN, photoUrl, daysBetween } from "@/lib/utils";
 
 interface L {
@@ -30,16 +31,6 @@ interface Cited {
   photoPath: string | null;
   title: string | null;
 }
-
-const TRIGGER_LABEL: Record<string, string> = {
-  anniversary: "周年回顾",
-  open_loop: "未完结的线索",
-  low_mood: "情绪关怀",
-  milestone: "里程碑",
-  capsule: "时间胶囊",
-  welcome: "初次见面",
-  manual: "邮差手写",
-};
 
 export function LetterView({ l, cited }: { l: L; cited: Cited[] }) {
   const [opened, setOpened] = useState(!!l.readAt);

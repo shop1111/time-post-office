@@ -1,28 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
-import { useToast } from "./Toast";
+import { TimeTravelOverlay } from "./postman/TimeTravelOverlay";
 
-/** 立即请邮差巡检一次（忽略频控），方便演示 */
+/** 立即请邮差巡检一次（忽略频控），方便演示；巡检过程用同一条流水线直播 */
 export function ForceLetter() {
-  const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(false);
   const router = useRouter();
-  const toast = useToast();
-  async function run() {
-    setBusy(true);
-    const r = await fetch("/api/postman", { method: "POST", body: JSON.stringify({ action: "force" }) }).then((r) => r.json());
-    setBusy(false);
-    if (r.generated.length) {
-      toast("邮差写好了一封新信", "📮");
-      router.push(`/mailbox/${r.generated[0]}`);
-    } else toast("邮差翻了翻档案，暂时没有想写的信（试试时光机快进）", "🤔");
+  const finish = useCallback(() => {
+    setRunning(false);
     router.refresh();
-  }
+  }, [router]);
   return (
-    <button className="btn btn-ghost text-sm" onClick={run} disabled={busy}>
-      <Sparkles size={14} className={busy ? "animate-spin" : ""} /> {busy ? "邮差正在写信…" : "请邮差现在巡检"}
-    </button>
+    <>
+      <button className="btn btn-ghost text-sm" onClick={() => setRunning(true)} disabled={running}>
+        <Sparkles size={14} /> 请邮差现在巡检
+      </button>
+      {running && <TimeTravelOverlay request={{ action: "force" }} onClose={finish} />}
+    </>
   );
 }
