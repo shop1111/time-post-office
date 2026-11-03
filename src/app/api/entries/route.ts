@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { saveUpload } from "@/lib/files";
+import { saveUpload, mimeOf } from "@/lib/files";
 import { describeImage, transcribe } from "@/lib/ai/provider";
 import { reverseGeocode } from "@/lib/geo";
 import { now } from "@/lib/clock";
@@ -24,6 +24,8 @@ export async function POST(req: Request) {
   if (!text && !photo && !audio && !transcript) return NextResponse.json({ error: "空空的信封寄不出去哦" }, { status: 400 });
 
   let photoPath: string | null = null;
+  let audioPath: string | null = null;
+  let audioMime: string | null = null;
   let visionCaption: string | null = null;
   if (photo && photo.size) {
     photoPath = await saveUpload(photo, "photo");
@@ -31,7 +33,8 @@ export async function POST(req: Request) {
     visionCaption = await describeImage(`data:${photo.type || "image/jpeg"};base64,${b64}`, text);
   }
   if (audio && audio.size) {
-    await saveUpload(audio, "voice");
+    audioPath = await saveUpload(audio, "voice");
+    audioMime = audio.type && audio.type !== "application/octet-stream" ? audio.type : mimeOf(audioPath);
     if (!transcript) transcript = await transcribe(audio, audio.name || "voice.webm");
   }
   if (!place && lat !== null && lng !== null) place = reverseGeocode(lat, lng);
@@ -42,6 +45,8 @@ export async function POST(req: Request) {
       text: text || transcript || "",
       transcript,
       photoPath,
+      audioPath,
+      audioMime,
       visionCaption,
       exifTime,
       lat,

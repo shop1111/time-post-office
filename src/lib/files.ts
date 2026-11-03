@@ -31,5 +31,7 @@ function guessExt(type: string) {
   if (type.includes("webm")) return ".webm";
   if (type.includes("ogg")) return ".ogg";
   if (type.includes("mp4")) return ".m4a";
+  if (type.includes("wav")) return ".wav";
+  if (type.includes("mpeg") || type.includes("mp3")) return ".mp3";
   return ".bin";
 }
