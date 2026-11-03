@@ -6,6 +6,7 @@ import { extractEntry, persistEntry, readEntryState, savedExtraction } from "@/l
 import { refreshProfile } from "@/lib/memory/profile";
 import { generateStoryCard } from "@/lib/story";
 import { reserveFinalize } from "@/lib/entry-work";
+import { logError } from "@/lib/errors";
 import type { SSEWriter } from "@/lib/server-sse";
 import type { Extraction, FinalizeErrorEvent, FinalizeResult, FinalizeStage, FinalizeStageEvent, FinalizeStatusResponse, ExecutionInfo } from "@/lib/types";
 
@@ -117,11 +118,11 @@ async function execute(run: Run, ready: Promise<void>): Promise<FinalizeStatusRe
         run.checkpoint = next;
         emit(run, "stage", run.state.stages.find((s) => s.stage === stage));
         if (next.executions[stage]?.mode === "fallback") emit(run, "warning", { stage, code: next.executions[stage]!.fallbackReason ?? "AI_FALLBACK", message: "远程模型未完成，本阶段使用本地结果" });
-      } catch {
+      } catch (cause) {
         const error: FinalizeErrorEvent = { stage, code: `FINALIZE_${stage.toUpperCase()}_FAILED`, message: `处理阶段 ${stage} 失败，可重试`, retryable: true };
         run.state.stages = replaceStage(run.state.stages, { stage, status: "failed", durationMs: Date.now() - started, ...(next.executions[stage] ? { execution: next.executions[stage] } : {}) });
         run.state.error = error;
-        console.warn(`[finalize] ${stage} failed`);
+        logError(`finalize.${stage}`, cause);
         if (stage === "profile" || stage === "story") {
           await save(run);
           emit(run, "stage", run.state.stages.find((s) => s.stage === stage));
@@ -139,11 +140,12 @@ async function execute(run: Run, ready: Promise<void>): Promise<FinalizeStatusRe
     run.state.currentStage = null;
     if (run.state.status === "completed") delete run.state.error;
     await save(run);
-  } catch {
+  } catch (error) {
+    logError("finalize", error);
     run.state.status = "failed";
     run.state.error = { ...(run.state.currentStage ? { stage: run.state.currentStage } : {}), code: "FINALIZE_FAILED", message: "收进邮局暂时失败，请重试", retryable: true };
     // 数据库不可用时不抛出未处理拒绝；重启/重试按已落库检查点继续。
-    await save(run).catch(() => console.warn("[finalize] status persistence failed"));
+    await save(run).catch((error) => logError("finalize.status", error));
   }
   return run.state;
 }

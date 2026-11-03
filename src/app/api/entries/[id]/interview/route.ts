@@ -9,6 +9,7 @@ import { getProfile } from "@/lib/memory/profile";
 import { now } from "@/lib/clock";
 import { tryStartInterview } from "@/lib/entry-work";
 import { sseResponse } from "@/lib/server-sse";
+import { logError } from "@/lib/errors";
 import type { ApiError, EntityType, ExecutionInfo, InterviewMetaEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -72,12 +73,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         } catch (error) {
           const interrupted = error instanceof ChatStreamError;
           writer.send("error", { code: interrupted ? error.code : "INTERVIEW_FAILED", message: interrupted ? "追问中断，请重试这一轮" : "追问暂时失败，请稍后重试", retryable: interrupted ? error.retryable : true });
-          console.warn(`[interview] ${interrupted ? error.code : "failed"}`);
+          logError("interview", error);
         } finally { writer.close(); release(); }
       })();
     });
     return response;
-  } catch {
+  } catch (error) {
+    logError("interview.prepare", error);
     return fail(500, "INTERVIEW_FAILED", "追问暂时失败，请稍后重试", true);
   } finally { if (!streaming) release(); }
 }

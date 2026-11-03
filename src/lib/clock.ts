@@ -17,9 +17,15 @@ export async function now(): Promise<Date> {
 }
 
 export async function fastForward(days: number): Promise<Date> {
-  const offset = (await getOffset()) + days * MS_DAY;
-  await db.setting.upsert({ where: { key: KEY }, update: { value: String(offset) }, create: { key: KEY, value: String(offset) } });
-  return new Date(Date.now() + offset);
+  if (!Number.isFinite(days)) throw new Error("Clock days must be finite");
+  const delta = days * MS_DAY;
+  // Setting.value 是字符串：用一条带参数的 SQLite UPSERT 完成自增和返回，避免读后写丢增量。
+  const [row] = await db.$queryRaw<Array<{ value: string }>>`
+    INSERT INTO "Setting" ("key", "value") VALUES (${KEY}, ${String(delta)})
+    ON CONFLICT("key") DO UPDATE SET "value" = CAST(CAST("Setting"."value" AS REAL) + ${delta} AS TEXT)
+    RETURNING "value"
+  `;
+  return new Date(Date.now() + Number(row.value));
 }
 
 export async function resetClock() {
