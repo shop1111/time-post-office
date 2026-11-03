@@ -10,7 +10,6 @@ export interface Snapshot {
   now: Date;
   entries: Array<{ id: string; occurredAt: Date; mood: number | null; title: string | null; type: string }>;
   memories: Array<{ id: string; entryId: string | null; kind: string; content: string; importance: number; occurredAt: Date; dueAt: Date | null; resolved: boolean; entities: string[] }>;
-  sentKeys: Set<string>;
   entityFreq: Array<{ name: string; type: string; count: number }>;
 }
 
@@ -46,7 +45,6 @@ export function anniversaryTriggers(s: Snapshot): LetterCandidate[] {
     for (const ms of ANNIVERSARY_MILESTONES) {
       if (age < ms.days || age > ms.days + ANNIV_WINDOW_DAYS) continue;
       const key = `anniv:${e.id}:${ms.days}`;
-      if (s.sentKeys.has(key)) continue;
       const anchor = [...mems].sort((a, b) => b.importance - a.importance);
       out.push({
         key,
@@ -72,7 +70,6 @@ export function openLoopTriggers(s: Snapshot): LetterCandidate[] {
       const over = (s.now.getTime() - m.dueAt!.getTime()) / DAY;
       return over >= 0 && over <= 30;
     })
-    .filter((m) => !s.sentKeys.has(`loop:${m.id}`))
     .map((m) => ({
       key: `loop:${m.id}`,
       type: "open_loop" as const,
@@ -94,12 +91,12 @@ export function lowMoodTriggers(s: Snapshot): LetterCandidate[] {
   if (avg > -0.25) return [];
   const week = isoWeek(s.now);
   const key = `mood:${week}`;
-  if (s.sentKeys.has(key)) return [];
   const ids = new Set(recent.map((e) => e.id));
   const mems = s.memories.filter((m) => m.entryId && ids.has(m.entryId)).sort((a, b) => b.importance - a.importance);
   // 同时找一段过去的美好记忆作为「光」
+  const positiveEntries = new Set(s.entries.filter((e) => (e.mood ?? 0) >= 0.25 && e.occurredAt < new Date(s.now.getTime() - 7 * DAY)).map((e) => e.id));
   const bright = s.memories
-    .filter((m) => !ids.has(m.entryId ?? "") && m.importance >= 7 && m.kind === "event")
+    .filter((m) => m.entryId && positiveEntries.has(m.entryId) && m.occurredAt <= s.now && m.importance >= 7 && m.kind === "event")
     .sort((a, b) => b.importance - a.importance)[0];
   return [
     {
@@ -122,7 +119,7 @@ export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
   const n = s.entries.filter((e) => e.occurredAt <= s.now).length;
   for (const target of [10, 30, 100, 365]) {
     const key = `count:${target}`;
-    if (n >= target && !s.sentKeys.has(key)) {
+    if (n >= target) {
       const best = [...s.memories].sort((a, b) => b.importance - a.importance).slice(0, 3);
       out.push({
         key,
@@ -135,19 +132,17 @@ export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
         query: best.map((m) => m.content).join(" "),
         entities: [],
       });
-      break;
     }
   }
   for (const p of s.entityFreq.filter((e) => e.type === "person" && e.count >= 4)) {
     const key = `person:${p.name}`;
-    if (s.sentKeys.has(key)) continue;
     const mems = s.memories.filter((m) => m.entities.includes(p.name)).sort((a, b) => b.importance - a.importance);
     out.push({
       key,
       type: "milestone",
       sender: "postman",
       priority: 5 + p.count / 4,
-      reason: `「${p.name}」已经在你的生活里出现了 ${p.count} 次`,
+      reason: `「${p.name}」已经出现在 ${p.count} 段记录里`,
       writtenAt: s.now,
       anchorMemoryIds: mems.slice(0, 3).map((m) => m.id),
       query: `${p.name} ${mems.map((m) => m.content).join(" ")}`,

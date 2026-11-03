@@ -6,11 +6,29 @@ const NOW = new Date("2026-11-03T12:00:00");
 const ago = (d: number) => new Date(NOW.getTime() - d * DAY);
 
 function snap(over: Partial<Snapshot> = {}): Snapshot {
-  return { now: NOW, entries: [], memories: [], sentKeys: new Set(), entityFreq: [], ...over };
+  return { now: NOW, entries: [], memories: [], entityFreq: [], ...over };
 }
 
 describe("邮差触发器", () => {
-  it("旅行照片满 90 天 → 过去的你来信，且只寄一次", () => {
+  it("明亮旧记忆必须属于正向旧记录，不选重要但悲伤、无情绪或未来的记录", () => {
+    const s = snap({
+      entries: [
+        { id: "a", occurredAt: ago(1), mood: -0.8, title: "", type: "text" },
+        { id: "b", occurredAt: ago(2), mood: -0.8, title: "", type: "text" },
+        { id: "sad", occurredAt: ago(90), mood: -0.9, title: "", type: "text" },
+        { id: "unknown", occurredAt: ago(90), mood: null, title: "", type: "text" },
+        { id: "bright", occurredAt: ago(90), mood: 0.25, title: "", type: "text" },
+        { id: "future", occurredAt: ago(-1), mood: 0.9, title: "", type: "text" },
+      ],
+      memories: ["sad", "unknown", "bright", "future"].map((id) => ({ id, entryId: id, kind: "event", content: id, importance: id === "bright" ? 7 : 10, occurredAt: ago(90), dueAt: null, resolved: false, entities: [] })),
+    });
+    expect(lowMoodTriggers(s)[0].anchorMemoryIds).toEqual(["bright"]);
+  });
+  it("输出所有已达到的记录里程碑，由引擎统一去重，不因10条挡住30条", () => {
+    const entries = Array.from({ length: 35 }, (_, i) => ({ id: String(i), occurredAt: ago(1), mood: 0, title: "", type: "text" }));
+    expect(milestoneTriggers(snap({ entries })).map((c) => c.key)).toEqual(["count:10", "count:30"]);
+  });
+  it("旅行照片满 90 天 → 过去的你候选，去重由引擎负责", () => {
     const s = snap({
       entries: [{ id: "trip", occurredAt: ago(92), mood: 0.9, title: "洱海日出", type: "photo" }],
       memories: [{ id: "m1", entryId: "trip", kind: "event", content: "洱海日出", importance: 9, occurredAt: ago(92), dueAt: null, resolved: false, entities: ["洱海"] }],
@@ -19,8 +37,7 @@ describe("邮差触发器", () => {
     expect(c).toHaveLength(1);
     expect(c[0].sender).toBe("past_self");
     expect(c[0].writtenAt.getTime()).toBe(ago(92).getTime());
-    s.sentKeys.add(c[0].key);
-    expect(anniversaryTriggers(s)).toHaveLength(0);
+    expect(anniversaryTriggers(s)).toHaveLength(1);
   });
 
   it("不重要的文字记录不触发周年回顾", () => {

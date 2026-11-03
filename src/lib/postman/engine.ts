@@ -1,165 +1,121 @@
-/**
- * 邮差引擎：快照 → 触发器候选 → 频控 → 检索记忆 → 模仿口吻写信 → 事实自检 → 投递
- */
-import { z } from "zod";
+/** 邮差引擎：候选去向与执行分支同源，单封失败不影响整轮。 */
+import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { chat, isMock } from "@/lib/ai/provider";
-import { chatJson } from "@/lib/ai/json";
-import { letterMessages, rewriteMessages, selfCheckMessages } from "@/lib/ai/prompts";
-import { mockLetter } from "@/lib/ai/mock";
 import { now as clockNow } from "@/lib/clock";
-import { retrieve, formatMemories, fmtDate, type RetrievedMemory } from "@/lib/memory/retrieve";
-import { NOSTALGIA_WEIGHTS } from "@/lib/memory/rank";
-import { getProfile, styleText } from "@/lib/memory/profile";
-import { collectCandidates, type LetterCandidate, type Snapshot } from "./triggers";
+import { logError } from "@/lib/errors";
+import { collectCandidates, type Snapshot } from "./triggers";
+import { AlreadySentError, writeLetter } from "./writer";
+import { serializePostman } from "./queue";
+import type { PostmanDecision, PostmanResult, PostmanStage, PostmanStageEvent } from "@/lib/types";
+export { writeLetter } from "./writer";
 
-const MIN_GAP_HOURS = 20; // 频控：AI 来信至少间隔 20 小时（虚拟时间）
-
+const MIN_GAP_HOURS = 20;
+const STAGES: PostmanStage[] = ["retrieve", "generate", "check", "deliver"];
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
-  const [entries, memories, letters, entities] = await Promise.all([
+  const [entries, memories] = await Promise.all([
     db.entry.findMany({ select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
     db.memory.findMany({ include: { entities: { include: { entity: true } } } }),
-    db.letter.findMany({ where: { triggerKey: { not: null } }, select: { triggerKey: true } }),
-    db.entity.findMany({ include: { _count: { select: { memories: true } } } }),
   ]);
-  return {
-    now,
-    entries,
-    memories: memories.map((m) => ({
-      id: m.id,
-      entryId: m.entryId,
-      kind: m.kind,
-      content: m.content,
-      importance: m.importance,
-      occurredAt: m.occurredAt,
-      dueAt: m.dueAt,
-      resolved: m.resolved,
-      entities: m.entities.map((e) => e.entity.name),
-    })),
-    sentKeys: new Set(letters.map((l) => l.triggerKey!)),
-    entityFreq: entities.map((e) => ({ name: e.name, type: e.type, count: e._count.memories })),
-  };
-}
-
-export interface TickResult {
-  now: Date;
-  delivered: string[];
-  generated: string[];
-  candidates: Array<Pick<LetterCandidate, "key" | "type" | "sender" | "priority" | "reason">>;
-  skippedByRateLimit: boolean;
-}
-
-/** 一次邮差巡检。maxLetters 用于「时光快进」时一次多送几封 */
-export async function tick(opts: { maxLetters?: number; ignoreGap?: boolean } = {}): Promise<TickResult> {
-  const now = await clockNow();
-  // 1. 投递到期的信（包括用户写给未来的时间胶囊）
-  const due = await db.letter.findMany({ where: { deliveredAt: null, scheduledAt: { lte: now } } });
-  for (const l of due) await db.letter.update({ where: { id: l.id }, data: { deliveredAt: now } });
-
-  // 2. 频控
-  const lastAi = await db.letter.findFirst({ where: { sender: { not: "user" }, deliveredAt: { not: null } }, orderBy: { deliveredAt: "desc" } });
-  const gapOk = opts.ignoreGap || !lastAi?.deliveredAt || now.getTime() - lastAi.deliveredAt.getTime() >= MIN_GAP_HOURS * 3_600_000;
-
-  const snapshot = await buildSnapshot(now);
-  const candidates = collectCandidates(snapshot);
-  const generated: string[] = [];
-  if (gapOk) {
-    // 同一类型一次只写一封，保证多样
-    const usedTypes = new Set<string>();
-    for (const c of candidates) {
-      if (generated.length >= (opts.maxLetters ?? 1)) break;
-      if (usedTypes.has(c.type)) continue;
-      usedTypes.add(c.type);
-      const letter = await writeLetter(c, now);
-      generated.push(letter.id);
+  const existing = new Set(entries.filter((entry) => entry.occurredAt <= now).map((entry) => entry.id));
+  const frequencies = new Map<string, { name: string; type: string; entries: Set<string> }>();
+  for (const memory of memories) {
+    if (!memory.entryId || !existing.has(memory.entryId)) continue;
+    for (const { entity } of memory.entities) {
+      const group = frequencies.get(entity.id) ?? { name: entity.name, type: entity.type, entries: new Set<string>() };
+      group.entries.add(memory.entryId);
+      frequencies.set(entity.id, group);
     }
   }
   return {
-    now,
-    delivered: due.map((d) => d.id),
-    generated,
-    candidates: candidates.slice(0, 8).map(({ key, type, sender, priority, reason }) => ({ key, type, sender, priority: Math.round(priority * 100) / 100, reason })),
-    skippedByRateLimit: !gapOk,
+    now, entries,
+    memories: memories.map((m) => ({ id: m.id, entryId: m.entryId, kind: m.kind, content: m.content, importance: m.importance, occurredAt: m.occurredAt, dueAt: m.dueAt, resolved: m.resolved, entities: m.entities.map((e) => e.entity.name) })),
+    entityFreq: [...frequencies.values()].map((group) => ({ name: group.name, type: group.type, count: group.entries.size })),
   };
 }
 
-const LetterSchema = z.object({
-  subject: z.string().min(1).max(40),
-  body: z.string().min(40).max(1500),
-  cited: z.array(z.string()).default([]),
-});
+export type TickResult = PostmanResult;
+export interface TickOptions {
+  maxLetters?: number;
+  ignoreGap?: boolean;
+  now?: Date;
+  runId?: string;
+  onDecision?: (decision: PostmanDecision) => void;
+  onStage?: (stage: PostmanStageEvent) => void;
+}
+/** 对直接调用的旧代码也保证串行；组合时钟动作应使用队列内的 tickWithinAction。 */
+export function tick(opts: TickOptions = {}): Promise<TickResult> {
+  const started = Date.now();
+  return serializePostman(async () => ({ ...await tickWithinAction(opts), durationMs: Date.now() - started }));
+}
 
-export async function writeLetter(c: LetterCandidate, now: Date) {
-  const profile = await getProfile();
-  const { style, desc } = await styleText();
-
-  // 锚点记忆 + 语义检索补充；「过去的你」只能看到写信那天之前的记忆
-  const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds } }, include: { entities: { include: { entity: true } } } })).sort(
-    (a, b) => c.anchorMemoryIds.indexOf(a.id) - c.anchorMemoryIds.indexOf(b.id),
-  );
-  const extra = await retrieve({
-    query: c.query || c.reason,
-    now,
-    k: 5,
-    entities: c.entities,
-    weights: NOSTALGIA_WEIGHTS,
-    before: c.sender === "past_self" ? new Date(c.writtenAt.getTime() + 86_400_000) : undefined,
+/** 仅供已经持有邮差动作队列的调用者使用，避免嵌套排队死锁。 */
+export async function tickWithinAction(opts: TickOptions = {}): Promise<TickResult> {
+  const started = Date.now();
+  const now = opts.now ?? await clockNow();
+  const runId = opts.runId ?? randomUUID();
+  const delivered = await db.$transaction(async (tx) => {
+    const due = await tx.letter.findMany({ where: { deliveredAt: null, scheduledAt: { lte: now } }, select: { id: true } });
+    await tx.letter.updateMany({ where: { id: { in: due.map((row) => row.id) }, deliveredAt: null }, data: { deliveredAt: now } });
+    return due.map((row) => row.id);
   });
-  const anchorMems: RetrievedMemory[] = anchors.map((a) => ({
-    id: a.id, kind: a.kind, content: a.content, importance: a.importance, occurredAt: a.occurredAt, entryId: a.entryId,
-    entities: a.entities.map((e) => e.entity.name), score: 99, parts: { sim: 1, recency: 0, importance: a.importance / 10, entity: 1 },
-  }));
-  const mems = [...anchorMems, ...extra.filter((e) => !c.anchorMemoryIds.includes(e.id))].slice(0, 7);
-  const memText = formatMemories(mems);
+  // reset 后虚拟未来的来信不能阻止真实今天收信。
+  const lastAi = await db.letter.findFirst({ where: { sender: { not: "user" }, deliveredAt: { lte: now } }, orderBy: { deliveredAt: "desc" } });
+  const gapOk = opts.ignoreGap || !lastAi?.deliveredAt || now.getTime() - lastAi.deliveredAt.getTime() >= MIN_GAP_HOURS * 3_600_000;
+  const candidates = collectCandidates(await buildSnapshot(now));
+  const existing = new Map((await db.letter.findMany({ where: { triggerKey: { not: null } }, select: { id: true, triggerKey: true } })).map((row) => [row.triggerKey!, row.id]));
+  const decisions: PostmanDecision[] = [];
+  const generated: string[] = [];
+  const usedTypes = new Set<string>();
+  const maxLetters = Math.max(0, Math.floor(opts.maxLetters ?? 1));
+  let selected = 0;
+  const publish = (decision: PostmanDecision) => opts.onDecision?.({ ...decision, stages: decision.stages.map((stage) => ({ ...stage })) });
 
-  const draft = await chatJson(
-    LetterSchema,
-    letterMessages({
-      sender: c.sender,
-      reason: c.reason,
-      today: fmtDate(now),
-      writtenAt: fmtDate(c.writtenAt),
-      memories: memText,
-      style: desc,
-      profile: profile.summary,
-      name: profile.name,
-    }),
-    {
-      temperature: 0.85,
-      maxTokens: 1400,
-      mock: () => mockLetter({ sender: c.sender, reason: c.reason, memories: mems, style, name: profile.name, writtenAt: c.writtenAt, today: now }),
-    },
-  );
-
-  // 事实自检：引用必须真实存在；真实模型下再做一次「无依据说法」核查与改写
-  const validIds = new Set(mems.map((m) => m.id));
-  let cited = draft.cited.filter((id) => validIds.has(id));
-  if (!cited.length) cited = c.anchorMemoryIds.filter((id) => validIds.has(id));
-  let body = draft.body;
-  let checked = "引用校验通过";
-  if (!isMock()) {
-    const check = await chatJson(z.object({ ok: z.boolean(), issues: z.array(z.string()).default([]) }), selfCheckMessages(body, memText), {
-      mock: () => ({ ok: true, issues: [] }),
-      temperature: 0,
-    });
-    if (!check.ok && check.issues.length) {
-      body = await chat(rewriteMessages(body, check.issues, memText), { temperature: 0.5, maxTokens: 1400, mock: () => body });
-      checked = `已修正 ${check.issues.length} 处无依据表述`;
-    } else checked = "事实核查通过";
+  for (const [index, candidate] of candidates.entries()) {
+    const { key, type, sender, priority, reason } = candidate;
+    const decision: PostmanDecision = { key, type, sender, priority: Math.round(priority * 100) / 100, rank: index + 1, outcome: "selected", reason, stages: [] };
+    decisions.push(decision);
+    const duplicate = existing.get(key);
+    // 固定优先次序就是实际拦截顺序，每个分支同时停止执行并记录原因。
+    if (duplicate) {
+      decision.outcome = "deduplicated"; decision.reason = "这个触发事件已有信件"; decision.existingLetterId = duplicate;
+    } else if (!gapOk) {
+      decision.outcome = "rate_limited"; decision.reason = "距离上一封AI来信不足20小时";
+    } else if (usedTypes.has(type)) {
+      decision.outcome = "type_limited"; decision.reason = "本轮已经选择过同类型信件";
+    } else if (selected >= maxLetters) {
+      decision.outcome = "quota_limited"; decision.reason = "本轮写信名额已用完";
+    } else {
+      selected++; usedTypes.add(type);
+      publish(decision);
+      const stageChanged = (stage: PostmanDecision["stages"][number]) => {
+        decision.stages = STAGES.flatMap((name) => {
+          const value = name === stage.name ? stage : decision.stages.find((previous) => previous.name === name);
+          return value ? [value] : [];
+        });
+        opts.onStage?.({ key, ...stage });
+      };
+      try {
+        const letter = await writeLetter(candidate, now, stageChanged);
+        decision.outcome = "generated"; decision.letterId = letter.id;
+        generated.push(letter.id); existing.set(key, letter.id);
+      } catch (error) {
+        if (error instanceof AlreadySentError) {
+          decision.outcome = "deduplicated"; decision.reason = "入库时发现同一触发事件已有信件";
+          decision.existingLetterId = error.letterId; existing.set(key, error.letterId);
+        } else {
+          decision.outcome = "failed";
+          const failed = decision.stages.find((stage) => stage.status === "failed")?.name;
+          decision.error = { code: `POSTMAN_${(failed ?? "LETTER").toUpperCase()}_FAILED`, message: "这封信处理失败，其他信件照常继续", retryable: true };
+          logError(`postman.${failed ?? "letter"}`, error);
+        }
+        for (const name of STAGES) if (!decision.stages.some((stage) => stage.name === name)) stageChanged({ name, status: "skipped", durationMs: 0 });
+      }
+    }
+    publish(decision);
   }
-
-  return db.letter.create({
-    data: {
-      sender: c.sender,
-      subject: draft.subject,
-      body: body.trim(),
-      triggerType: c.type,
-      triggerKey: c.key,
-      reason: `${c.reason}。（${checked}）`,
-      citedMemoryIds: JSON.stringify(cited),
-      writtenAt: c.writtenAt,
-      scheduledAt: now,
-      deliveredAt: now,
-    },
-  });
+  return {
+    now: now.toISOString(), delivered, generated, runId, durationMs: Date.now() - started, decisions, totalCandidates: candidates.length,
+    candidates: candidates.slice(0, 8).map(({ key, type, sender, priority, reason }) => ({ key, type, sender, priority: Math.round(priority * 100) / 100, reason })),
+    skippedByRateLimit: !gapOk,
+  };
 }

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { embed } from "@/lib/ai/provider";
+import { embed, type CallOptions } from "@/lib/ai/provider";
 import { fromBytes, toBytes } from "./embed-lite";
 import { DEFAULT_WEIGHTS, mmr, scoreCandidates, type Candidate, type RankWeights } from "./rank";
 
@@ -29,6 +29,7 @@ export async function retrieve(opts: {
   excludeEntryId?: string;
   kinds?: string[];
   touch?: boolean;
+  onExecution?: CallOptions["onExecution"];
 }): Promise<RetrievedMemory[]> {
   const rows = await db.memory.findMany({
     where: {
@@ -40,13 +41,13 @@ export async function retrieve(opts: {
   });
   if (!rows.length) return [];
 
-  const [qvec] = await embed([opts.query]);
+  const [qvec] = await embed([opts.query], { onExecution: opts.onExecution });
   const stale = rows.filter((r) => {
     const v = fromBytes(r.embedding);
     return !v || v.length !== qvec.length;
   });
   if (stale.length) {
-    const vecs = await embed(stale.map((r) => r.content));
+    const vecs = await embed(stale.map((r) => r.content), { onExecution: opts.onExecution });
     await Promise.all(stale.map((r, i) => db.memory.update({ where: { id: r.id }, data: { embedding: toBytes(vecs[i]) } })));
     stale.forEach((r, i) => (r.embedding = toBytes(vecs[i]) as never));
   }
