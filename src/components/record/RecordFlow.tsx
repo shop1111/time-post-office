@@ -4,29 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, Mic, PenLine, Send, Link2, X, Check } from "lucide-react";
+import { Camera, Mic, PenLine, Send, X, Check } from "lucide-react";
 import { PhotoPicker, type PhotoInfo } from "./PhotoPicker";
 import { VoiceRecorder } from "./VoiceRecorder";
+import { RecallChips, type Recalled } from "./RecallChips";
 import { StoryCard } from "@/components/StoryCard";
 import { postSSE } from "@/lib/sse";
 import { cn, fmtCN } from "@/lib/utils";
 import { KIND_LABEL, type MemoryKind } from "@/lib/types";
+import type { RankWeights } from "@/lib/memory/rank";
 
 type Stage = "compose" | "sending" | "interview" | "finalizing" | "done";
 type Kind = "photo" | "voice" | "text";
 
-interface Related {
-  id: string;
-  content: string;
-  date: string;
-  score: number;
-  entryId: string | null;
-  parts: { sim: number; recency: number; importance: number; entity: number };
-}
 interface Msg {
   role: "user" | "assistant";
   content: string;
-  related?: Related[];
+  related?: Recalled[];
+  weights?: RankWeights;
 }
 interface Result {
   entry: { id: string; title: string; mood: number; place: string | null; occurredAt: string; photoPath: string | null };
@@ -71,7 +66,10 @@ export function RecordFlow({ initialType, today }: { initialType: Kind; today: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photo]);
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [msgs, stage]);
+  // 新版 Chrome 的 scrollIntoView 会返回 Promise，不能直接作为 effect 的返回值，否则 React 报错并整页刷新
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [msgs, stage]);
 
   const canSend = kind === "photo" ? !!photo : kind === "voice" ? !!audio || text.trim().length > 0 : text.trim().length > 0;
 
@@ -112,11 +110,11 @@ export function RecordFlow({ initialType, today }: { initialType: Kind; today: s
     try {
       await postSSE(`/api/entries/${id}/interview`, { message }, (event, data) => {
         if (event === "meta") {
-          const d = data as { related: Related[]; final: boolean };
+          const d = data as { related: Recalled[]; final: boolean; weights?: RankWeights };
           setFinal(d.final);
           setMsgs((m) => {
             const c = [...m];
-            c[c.length - 1] = { ...c[c.length - 1], related: d.related };
+            c[c.length - 1] = { ...c[c.length - 1], related: d.related, weights: d.weights };
             return c;
           });
         } else if (event === "delta") {
@@ -233,21 +231,7 @@ export function RecordFlow({ initialType, today }: { initialType: Kind; today: s
         {msgs.map((m, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
             <div className="max-w-[85%]">
-              {m.role === "assistant" && m.related && m.related.length > 0 && (
-                <div className="mb-1.5 flex flex-wrap gap-1.5">
-                  {m.related.map((r) => (
-                    <Link
-                      key={r.id}
-                      href={r.entryId ? `/entry/${r.entryId}` : "/memory"}
-                      target="_blank"
-                      title={`检索得分 ${r.score} = 语义 ${r.parts.sim.toFixed(2)} · 新近 ${r.parts.recency.toFixed(2)} · 重要 ${r.parts.importance.toFixed(2)} · 实体 ${r.parts.entity.toFixed(2)}`}
-                      className="chip !bg-post-soft !text-post hover:underline"
-                    >
-                      <Link2 size={11} /> 想起了 {fmtCN(r.date, false)}：{r.content.slice(0, 16)}…
-                    </Link>
-                  ))}
-                </div>
-              )}
+              {m.role === "assistant" && m.related && m.related.length > 0 && <RecallChips items={m.related} weights={m.weights} />}
               <div
                 className={cn(
                   "rounded-2xl px-4 py-2.5 text-[15px] leading-7",
