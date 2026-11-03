@@ -5,6 +5,8 @@ import { storyMessages, recapMessages } from "@/lib/ai/prompts";
 import { mockStory, mockRecap } from "@/lib/ai/mock";
 import { styleText, getProfile } from "@/lib/memory/profile";
 import { fmtDate } from "@/lib/memory/retrieve";
+import type { CallOptions } from "@/lib/ai/provider";
+import type { Prisma, StoryCard } from "@prisma/client";
 
 const StorySchema = z.object({
   title: z.string().min(1).max(30),
@@ -19,7 +21,7 @@ function pickTemplate(e: { type: string; mood: number | null; occurredAt: Date }
   return (e.mood ?? 0) > 0.4 ? "film" : "paper";
 }
 
-export async function generateStoryCard(entryId: string) {
+export async function generateStoryCard(entryId: string, options: CallOptions = {}, checkpoint?: (tx: Prisma.TransactionClient, card: StoryCard) => Promise<void>) {
   const entry = await db.entry.findUniqueOrThrow({ where: { id: entryId }, include: { messages: { orderBy: { createdAt: "asc" } } } });
   const conversation = entry.messages.map((m) => `${m.role === "user" ? "我" : "邮差"}：${m.content}`).join("\n");
   const { desc } = await styleText();
@@ -34,6 +36,7 @@ export async function generateStoryCard(entryId: string) {
       style: desc,
     }),
     {
+      ...options,
       temperature: 0.9,
       mock: () =>
         mockStory({
@@ -45,8 +48,12 @@ export async function generateStoryCard(entryId: string) {
         }),
     },
   );
-  await db.storyCard.deleteMany({ where: { entryId } });
-  return db.storyCard.create({ data: { entryId, ...story, template: pickTemplate(entry) } });
+  return db.$transaction(async (tx) => {
+    await tx.storyCard.deleteMany({ where: { entryId } });
+    const card = await tx.storyCard.create({ data: { entryId, ...story, template: pickTemplate(entry) } });
+    await checkpoint?.(tx, card);
+    return card;
+  });
 }
 
 export interface RecapPayload {

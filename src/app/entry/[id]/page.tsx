@@ -6,6 +6,7 @@ import { now } from "@/lib/clock";
 import { retrieve } from "@/lib/memory/retrieve";
 import { StoryCard } from "@/components/StoryCard";
 import { EntryActions } from "@/components/EntryActions";
+import { ScoreBreakdown } from "@/components/memory/ScoreBreakdown";
 import { fmtCN, fmtTime, photoUrl, moodEmoji } from "@/lib/utils";
 import { KIND_LABEL, type MemoryKind } from "@/lib/types";
 
@@ -18,7 +19,10 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
   if (!entry) notFound();
   const t = await now();
   const related = entry.summary || entry.text
-    ? (await retrieve({ query: `${entry.summary ?? ""} ${entry.text}`, now: t, k: 4, excludeEntryId: id, touch: false, entities: entry.memories.flatMap((m) => m.entities.map((e) => e.entity.name)) }))
+    ? (await retrieve({ query: `${entry.summary ?? ""} ${entry.text}`, now: t, k: 4, excludeEntryId: id, touch: false, entities: entry.memories.flatMap((m) => m.entities.map((e) => e.entity.name)) })).filter(
+        // 与追问时的过滤一致：只是「最近」或「重要」但内容无关的记忆不算想起
+        (r) => r.parts.sim > 0.12 || r.parts.entity > 0,
+      )
     : [];
   const card = entry.cards[0];
   const emotions = parseJson<string[]>(entry.emotions, []);
@@ -106,9 +110,7 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
               <Link key={r.id} href={r.entryId ? `/entry/${r.entryId}` : "/memory"} className="card block p-4 transition hover:-translate-y-0.5">
                 <div className="text-xs text-ink-3">{fmtCN(r.occurredAt)}</div>
                 <p className="mt-1 text-sm">{r.content}</p>
-                <div className="mt-2 font-mono text-[10px] text-ink-3">
-                  score {r.score.toFixed(2)} · sim {r.parts.sim.toFixed(2)} · imp {r.parts.importance.toFixed(1)} · ent {r.parts.entity.toFixed(1)}
-                </div>
+                <ScoreBreakdown compact className="mt-3" parts={r.parts} score={r.score} />
               </Link>
             ))}
           </div>
