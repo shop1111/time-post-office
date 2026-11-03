@@ -69,18 +69,23 @@ export function assertOk(res: Response) {
   const reason = res.status === 429 ? "http_429" : res.status >= 500 ? "http_5xx" : `http_${res.status}`;
   throw new AiFailure(reason, res.status === 429 || res.status >= 500);
 }
-export async function requestJson<T>(url: string, init: RequestInit, budget: Budget, decode: (data: unknown) => T): Promise<T> {
+/** JSON与音频共用预算、并发槽和有限重试；读取正文也在预算内。 */
+export async function requestResponse<T>(url: string, init: RequestInit, budget: Budget, decode: (response: Response) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     let release: (() => void) | undefined;
     try {
       release = await acquire(budget.signal);
       const res = await bounded(fetch(url, { ...init, signal: budget.signal }), budget.signal);
       assertOk(res);
-      return decode(await bounded(res.json(), budget.signal));
+      return await bounded(decode(res), budget.signal);
     } catch (error) {
       const failure = failureOf(error);
       if (!failure.retryable || attempt >= 2 || budget.signal.aborted) throw failure;
     } finally { release?.(); }
     await backoff(attempt, budget.signal);
   }
+}
+
+export function requestJson<T>(url: string, init: RequestInit, budget: Budget, decode: (data: unknown) => T): Promise<T> {
+  return requestResponse(url, init, budget, async (res) => decode(await res.json()));
 }

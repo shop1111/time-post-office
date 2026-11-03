@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readFile } from "fs/promises";
+import { mkdir, writeFile, open, unlink } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 
@@ -12,9 +12,38 @@ export async function saveUpload(file: File, prefix: string): Promise<string> {
   return name;
 }
 
-export async function readUpload(name: string) {
-  const safe = path.basename(name);
-  return readFile(path.join(UPLOAD_DIR, safe));
+/** 同时处理Windows和POSIX分隔符；拒绝盘符、流名称及特殊路径。 */
+export function uploadName(name: string) {
+  const safe = path.posix.basename(path.win32.basename(name));
+  if (!safe || safe === "." || safe === ".." || /[:\0]/.test(safe)) throw new Error("Invalid upload name");
+  return safe;
+}
+
+export async function openUpload(name: string) {
+  const file = await open(path.join(UPLOAD_DIR, uploadName(name)), "r");
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile()) throw new Error("Upload is not a file");
+    return { file, size: stat.size };
+  } catch (error) { await file.close(); throw error; }
+}
+
+/** 数据库存的是上传文件名；public插画、API路径或异常路径一律不清理。 */
+export async function deleteUpload(name: string | null) {
+  if (!name || /[/\\:\0]/.test(name) || name === "." || name === "..") return;
+  try { await unlink(path.join(UPLOAD_DIR, uploadName(name))); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+}
+
+/** 仅支持单段bytes；不满足或格式无效返回null，由路由统一416。 */
+export function byteRange(header: string, size: number): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
+  if (!match || !size || (!match[1] && !match[2])) return null;
+  const first = Number(match[1]), last = Number(match[2]);
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return null;
+  if (!match[1]) return last > 0 ? { start: Math.max(0, size - last), end: size - 1 } : null;
+  const end = match[2] ? Math.min(last, size - 1) : size - 1;
+  return first < size && end >= first ? { start: first, end } : null;
 }
 
 export function mimeOf(name: string) {
@@ -31,5 +60,7 @@ function guessExt(type: string) {
   if (type.includes("webm")) return ".webm";
   if (type.includes("ogg")) return ".ogg";
   if (type.includes("mp4")) return ".m4a";
+  if (type.includes("wav")) return ".wav";
+  if (type.includes("mpeg") || type.includes("mp3")) return ".mp3";
   return ".bin";
 }
