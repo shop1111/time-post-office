@@ -217,6 +217,40 @@ describe("stream lifecycle", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fallback).not.toHaveBeenCalled();
   });
+  it("思考模式：推理内容不输出，但算作有响应，不触发首包/空闲超时", async () => {
+    vi.stubEnv("CHAT_THINKING", "on");
+    const think = (text: string) => `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: text } }] })}\n\n`;
+    const enc = new TextEncoder();
+    const fetcher = fakeFetch(async () => new Response(new ReadableStream({
+      async start(c) {
+        // 推理持续 120ms，远超 50ms 的首包超时，但每 30ms 都有推理片段
+        for (let i = 0; i < 4; i++) { c.enqueue(enc.encode(think("想一想"))); await delayed(null, 30); }
+        c.enqueue(enc.encode(delta("正文") + "data: [DONE]\n\n"));
+        c.close();
+      },
+    })));
+    const onExecution = vi.fn();
+    const result = collect(chatStream(messages, { mock, onExecution, maxTokens: 300 }));
+    await vi.runAllTimersAsync();
+    expect(await result).toBe("正文");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onExecution.mock.calls[0][0].mode).toBe("remote");
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body.max_tokens).toBe(300 + 4000);
+  });
+  it("思考模式只对官方域名追加推理预算；默认 base_url 与官方文档一致", async () => {
+    vi.stubEnv("CHAT_THINKING", "on");
+    vi.stubEnv("CHAT_BASE_URL", "");
+    expect(roleConfig("chat")?.baseUrl).toBe("https://api.deepseek.com");
+    const fetcher = fakeFetch(async () => reply());
+    await chat(messages, { mock, maxTokens: 200 });
+    expect(String(fetcher.mock.calls[0][0])).toBe("https://api.deepseek.com/chat/completions");
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).max_tokens).toBe(4200);
+    vi.stubEnv("CHAT_BASE_URL", "https://compatible.example/v1");
+    await chat(messages, { mock, maxTokens: 200 });
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).max_tokens).toBe(200);
+  });
   it("提前EOF不作为成功，消费方return会释放并发槽", async () => {
     vi.stubEnv("AI_MAX_CONCURRENCY", "1");
     fakeFetch(async () => new Response(delta("半句")));
