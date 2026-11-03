@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin, Mic, Camera, PenLine } from "lucide-react";
 import { db, parseJson } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now } from "@/lib/clock";
 import { retrieve } from "@/lib/memory/retrieve";
 import { StoryCard } from "@/components/StoryCard";
@@ -14,7 +15,7 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const entry = await db.entry.findUnique({
     where: { id },
-    include: { messages: { orderBy: { createdAt: "asc" } }, memories: { include: { entities: { include: { entity: true } } } }, cards: true },
+    include: { messages: { orderBy: { createdAt: "asc" } }, memories: { where: ACTIVE_MEMORY, include: { entities: { include: { entity: true } } } }, cards: true },
   });
   if (!entry) notFound();
   const t = await now();

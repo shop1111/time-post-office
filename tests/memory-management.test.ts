@@ -270,3 +270,41 @@ describe("HTTP compatibility and errors", () => {
     expect((await response.json()).error).toContain("重新生成");
   });
 });
+
+describe("withdrawn memories stay out of downstream features", () => {
+  it("retrieval and the postman snapshot skip withdrawn memories", async () => {
+    const { retrieve } = await import("@/lib/memory/retrieve");
+    const { buildSnapshot } = await import("@/lib/postman/engine");
+    const query = { query: "需要撤回的独有记忆秘密", now: date, k: 5, touch: false };
+    expect((await retrieve(query)).map((m) => m.id)).toContain("m1");
+    await retractMemory("m1");
+    expect((await retrieve(query)).map((m) => m.id)).not.toContain("m1");
+    const snapshot = await buildSnapshot(date);
+    expect(snapshot.memories.map((m) => m.id)).toEqual(["m2"]);
+    expect(snapshot.entityFreq.find((e) => e.name === "旧地点")?.count).toBe(0);
+  });
+
+  it("recap statistics drop an entry whose memories were all withdrawn", async () => {
+    await retractMemory("m1");
+    const recap = await buildRecap("2026-10", true);
+    expect(recap?.stats.count).toBe(1);
+  });
+
+  it("an empty importance field gets a Chinese validation message", async () => {
+    const response = await PATCH(new Request("http://localhost/api/memories/m1", { method: "PATCH", body: JSON.stringify({ expectedRevision: 0, importance: 0 }) }), params);
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("重要度最低为 1");
+  });
+});
+
+describe("profile freshness without a build record", () => {
+  it("a never-invalidated profile (fresh install, old data, demo) stays usable", async () => {
+    await db.setting.deleteMany();
+    expect(await getProfile()).toMatchObject({ isStale: false, summary: "旧画像中的独有秘密" });
+  });
+  it("once anything is invalidated, a missing build record means stale", async () => {
+    await db.setting.deleteMany({ where: { key: PROFILE_REVISION_KEY } });
+    await retractMemory("m1");
+    expect((await getProfile()).isStale).toBe(true);
+  });
+});

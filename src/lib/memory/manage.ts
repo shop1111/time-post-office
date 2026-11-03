@@ -12,7 +12,7 @@ const EntitySchema = z.object({
 export const CorrectMemorySchema = z.object({
   expectedRevision: z.number().int().min(0),
   content: z.string().trim().min(2, "记忆至少填写 2 字").max(160, "记忆最多 160 字").optional(),
-  importance: z.number().int().min(1).max(10).optional(),
+  importance: z.number({ invalid_type_error: "重要度需为 1–10 的整数" }).int("重要度需为整数").min(1, "重要度最低为 1").max(10, "重要度最高为 10").optional(),
   entities: z.array(EntitySchema).max(20, "每条记忆最多 20 个关联").optional(),
 }).strict().refine((input) => input.content !== undefined || input.importance !== undefined || input.entities !== undefined, {
   message: "请提供要更正的内容、重要度或关联",

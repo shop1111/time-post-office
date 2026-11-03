@@ -95,7 +95,11 @@ export async function buildRecap(month: string, force = false): Promise<RecapPay
   const { entries, memories, revision, cached, name } = await db.$transaction(async (tx) => ({
     revision: await getDerivedRevision(tx),
     cached: force ? null : await tx.monthlyRecap.findUnique({ where: { month } }),
-    entries: await tx.entry.findMany({ where: { occurredAt: { gte: start, lt: end } }, orderBy: { occurredAt: "asc" } }),
+    // 记忆已全部撤回的记录不再计入统计、情绪曲线和照片
+    entries: await tx.entry.findMany({
+      where: { occurredAt: { gte: start, lt: end }, NOT: { AND: [{ memories: { some: {} } }, { memories: { every: { status: "retracted" } } }] } },
+      orderBy: { occurredAt: "asc" },
+    }),
     memories: await tx.memory.findMany({
       where: { status: "active", occurredAt: { gte: start, lt: end } },
       include: { entities: { include: { entity: true } } },

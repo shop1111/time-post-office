@@ -2,8 +2,8 @@ import { db } from "@/lib/db";
 import { embed } from "@/lib/ai/provider";
 import { toBytes } from "@/lib/memory/embed-lite";
 import { computeStyle } from "@/lib/memory/style";
-import { mockProfile } from "@/lib/ai/mock";
 import { resetClock } from "@/lib/clock";
+import { DERIVED_REVISION_KEY, PROFILE_REVISION_KEY } from "@/lib/memory/consistency";
 import { DEMO_ENTRIES, DEMO_LETTERS, EXAM_IN_DAYS } from "./data";
 
 const DAY = 86_400_000;
@@ -20,6 +20,8 @@ export async function clearAll() {
     db.letter.deleteMany(),
     db.monthlyRecap.deleteMany(),
     db.profile.deleteMany(),
+    // 数据清空后派生版本从 0 重新开始
+    db.setting.deleteMany({ where: { key: { in: [DERIVED_REVISION_KEY, PROFILE_REVISION_KEY] } } }),
   ]);
   await resetClock();
 }
@@ -121,17 +123,17 @@ export async function loadDemo() {
   // 画像：文风指纹本地计算；摘要用预写的，保证演示质量且不依赖网络
   const texts = DEMO_ENTRIES.flatMap((e) => [fill(e.text), ...(e.chat ?? []).filter(([r]) => r === "user").map(([, c]) => c)]);
   const style = computeStyle(texts);
-  const fallback = mockProfile({ name: "小满", people: ["小鹿", "妈妈", "阿哲"], places: ["杭州", "大理", "西湖"], goals: [], prefs: [] });
-  await db.profile.create({
-    data: {
-      id: "me",
-      name: "小满",
-      summary:
-        "你是一个从老家来到杭州、一个人认真生活的设计师。你会为一个像素失眠，也会为一场夕阳停下脚步。妈妈、小鹿和阿哲是你最常提起的人，年糕是你的室友。你在学胶片摄影，心里藏着一个「办一次自己的小摄影展」的愿望。最近工作压力有点大，但你一直在慢慢来。",
-      traits: JSON.stringify(["认真到失眠", "胶片摄影新手", "恋家", "爱看日出日落", "猫奴", "慢慢来"]),
-      style: JSON.stringify(style),
-    },
-  }).catch(async () => db.profile.update({ where: { id: "me" }, data: { summary: fallback.summary } }));
+  // 用 upsert：载入期间页面请求可能已经用 getProfile() 建了空画像
+  const profile = {
+    name: "小满",
+    summary:
+      "你是一个从老家来到杭州、一个人认真生活的设计师。你会为一个像素失眠，也会为一场夕阳停下脚步。妈妈、小鹿和阿哲是你最常提起的人，年糕是你的室友。你在学胶片摄影，心里藏着一个「办一次自己的小摄影展」的愿望。最近工作压力有点大，但你一直在慢慢来。",
+    traits: JSON.stringify(["认真到失眠", "胶片摄影新手", "恋家", "爱看日出日落", "猫奴", "慢慢来"]),
+    style: JSON.stringify(style),
+  };
+  await db.profile.upsert({ where: { id: "me" }, create: { id: "me", ...profile }, update: profile });
+  // 预写画像对应当前（初始）版本
+  await db.setting.upsert({ where: { key: PROFILE_REVISION_KEY }, create: { key: PROFILE_REVISION_KEY, value: "0" }, update: { value: "0" } });
 
   return { entries: DEMO_ENTRIES.length, letters: DEMO_LETTERS.length };
 }

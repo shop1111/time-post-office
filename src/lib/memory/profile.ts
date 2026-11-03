@@ -13,7 +13,8 @@ export async function getProfile() {
     revision: await getDerivedRevision(tx),
     built: await tx.setting.findUnique({ where: { key: PROFILE_REVISION_KEY } }),
   }));
-  const isStale = built?.value !== String(revision);
+  // 从未失效过（版本 0）且没有构建记录：新安装、旧数据或示例数据，画像仍可用；之后以构建版本为准。
+  const isStale = built ? built.value !== String(revision) : revision !== 0;
   const style = isStale ? null : parseJson<StyleFingerprint | null>(p.style, null);
   return {
     ...p,

@@ -30,7 +30,7 @@ export default async function LetterPage({ params }: { params: Promise<{ id: str
           reply: l.reply,
           repliedAt: l.repliedAt?.toISOString() ?? null,
         }}
-        cited={cited.map((m) => ({ id: m.id, content: m.content, occurredAt: m.occurredAt.toISOString(), entryId: m.entryId, photoPath: m.entry?.photoPath ?? null, title: m.entry?.title ?? null }))}
+        cited={cited.map((m) => ({ id: m.id, retracted: m.status !== "active", content: m.status === "active" ? m.content : "", occurredAt: m.occurredAt.toISOString(), entryId: m.entryId, photoPath: m.entry?.photoPath ?? null, title: m.entry?.title ?? null }))}
       />
     </div>
   );

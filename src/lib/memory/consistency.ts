@@ -2,6 +2,9 @@ import type { Prisma } from "@prisma/client";
 
 export type MemoryStatus = "active" | "retracted";
 
+/** 只有有效记忆才能被检索、写进信、计入统计；已撤回的仅在记忆管理页供核对。 */
+export const ACTIVE_MEMORY = { status: "active" } as const;
+
 export type InvalidationReason =
   | "memory_created"
   | "memory_corrected"

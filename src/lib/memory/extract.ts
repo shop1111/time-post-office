@@ -8,6 +8,8 @@ import { extractHeuristic } from "./heuristics";
 import { toBytes } from "./embed-lite";
 import { fmtDate } from "./retrieve";
 import { refreshProfile } from "./profile";
+import { ACTIVE_MEMORY } from "./consistency";
+import { monthKey } from "@/lib/utils";
 import type { EntityType, Extraction, MemoryKind } from "@/lib/types";
 
 const KINDS = ["event", "fact", "person", "place", "goal", "plan", "preference"] as const;
@@ -76,13 +78,15 @@ export function savedExtraction(entry: Awaited<ReturnType<typeof readEntryState>
   return {
     title: entry.title ?? "已保存的记录", summary: entry.summary ?? "", mood: entry.mood ?? 0,
     emotions: parseJson<string[]>(entry.emotions, []), place: entry.place,
-    memories: entry.memories.map((m) => ({
+    memories: entry.memories.filter((m) => m.status === ACTIVE_MEMORY.status).map((m) => ({
       kind: m.kind as MemoryKind, content: m.content, importance: m.importance,
       dueDate: m.dueAt?.toISOString().slice(0, 10) ?? null,
       entities: m.entities.map(({ entity }) => ({ name: entity.name, type: entity.type as EntityType })),
     })),
   };
 }
+
+const activeIds = (entry: Awaited<ReturnType<typeof readEntryState>>) => entry.memories.filter((m) => m.status === ACTIVE_MEMORY.status).map((m) => m.id);
 
 export interface PersistedEntry { extraction: Extraction; memoryIds: string[] }
 /** 保存事务内再次检查终态；保存后不删除、不更新已有记忆。检查点也必须在本事务落库。 */
@@ -95,7 +99,7 @@ export async function persistEntry(
   return db.$transaction(async (tx) => {
     const entry = await readEntryState(entryId, tx);
     if (entry.interviewDone || entry.memories.length) {
-      const saved = { extraction: savedExtraction(entry), memoryIds: entry.memories.map((m) => m.id) };
+      const saved = { extraction: savedExtraction(entry), memoryIds: activeIds(entry) };
       await checkpoint?.(tx, saved);
       return saved;
     }
@@ -119,6 +123,8 @@ export async function persistEntry(
       title: extraction.title, summary: extraction.summary, mood: extraction.mood,
       emotions: JSON.stringify(extraction.emotions), place: entry.place ?? extraction.place ?? null, interviewDone: true,
     } });
+    // 新记忆只影响所在月份的回忆：删掉该月缓存，下次打开按新记忆重建（画像由后续阶段刷新）
+    await tx.monthlyRecap.deleteMany({ where: { month: monthKey(entry.occurredAt) } });
     const saved = { extraction, memoryIds };
     await checkpoint?.(tx, saved);
     return saved;
@@ -132,13 +138,13 @@ export async function processEntry(entryId: string) {
   let memoryIds: string[];
   if (entry.interviewDone || entry.memories.length) {
     extraction = savedExtraction(entry);
-    memoryIds = entry.memories.map((m) => m.id);
+    memoryIds = activeIds(entry);
   } else {
     const extracted = await extractEntry(entryId);
     const vectors = await embed(extracted.memories.map((m) => m.content));
     ({ extraction, memoryIds } = await persistEntry(entryId, extracted, vectors));
   }
   await refreshProfile().catch(() => console.warn("[profile] 更新失败"));
-  const memories = await db.memory.findMany({ where: { id: { in: memoryIds } }, include: { entities: { include: { entity: true } } } });
+  const memories = await db.memory.findMany({ where: { id: { in: memoryIds }, ...ACTIVE_MEMORY }, include: { entities: { include: { entity: true } } } });
   return { extraction, memories };
 }

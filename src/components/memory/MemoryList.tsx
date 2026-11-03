@@ -115,7 +115,7 @@ export function MemoryList({ items }: { items: Item[] }) {
                 <textarea aria-label="记忆内容" className="input mt-1 min-h-24 w-full text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} minLength={2} maxLength={160} required autoFocus disabled={!!busy} />
               </label>
               <label className="block text-xs text-ink-2">重要度（1–10）
-                <input className="input ml-2 w-20 text-sm" type="number" min={1} max={10} step={1} required value={importance} onChange={(event) => setImportance(event.target.valueAsNumber)} disabled={!!busy} />
+                <input className="input ml-2 w-20 text-sm" type="number" min={1} max={10} step={1} required value={importance} onChange={(event) => setImportance(Number.isNaN(event.target.valueAsNumber) ? 0 : event.target.valueAsNumber)} disabled={!!busy} />
               </label>
               <fieldset className="space-y-2" disabled={!!busy}>
                 <legend className="text-xs text-ink-2">关联人物、地点与主题</legend>

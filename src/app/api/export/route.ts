@@ -7,7 +7,7 @@ export async function GET() {
   const [profile, entries, memories, entities, letters, cards] = await Promise.all([
     db.profile.findMany(),
     db.entry.findMany({ include: { messages: true } }),
-    db.memory.findMany({ select: { id: true, entryId: true, kind: true, content: true, importance: true, occurredAt: true, dueAt: true, resolved: true } }),
+    db.memory.findMany({ select: { id: true, entryId: true, kind: true, content: true, importance: true, occurredAt: true, dueAt: true, resolved: true, status: true, revision: true, retractedAt: true } }),
     db.entity.findMany(),
     db.letter.findMany(),
     db.storyCard.findMany(),
