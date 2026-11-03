@@ -14,6 +14,8 @@ model Entry {
   text          String         @default("")
   transcript    String?
   photoPath     String?
+  audioPath     String?
+  audioMime     String?
   visionCaption String?
   exifTime      DateTime?
   lat           Float?
@@ -109,6 +111,8 @@ model Letter {
   triggerType    String // anniversary | open_loop | low_mood | milestone | capsule | welcome | manual
   triggerKey     String?   @unique // 去重键
   reason         String    @default("")
+  checkStatus    String    @default("unchecked")
+  checkNote      String    @default("")
   citedMemoryIds String    @default("[]") // JSON string[]
   writtenAt      DateTime  @default(now()) // 落款时间（"过去的你"可早于现在）
   scheduledAt    DateTime
@@ -142,4 +146,21 @@ model MonthlyRecap {
 model Setting {
   key   String @id
   value String
+}
+
+/// 阶段状态和内部检查点由业务事务维护；日期通过 API 序列化为 ISO 字符串。
+model Job {
+  id           String   @id @default(cuid())
+  kind         String
+  targetId     String
+  status       String   @default("queued")
+  currentStage String?
+  stages       String   @default("[]")
+  checkpoint   String? // 内部中间结果，支持重试复用；不暴露给前端
+  result       String?
+  error        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([kind, targetId])
 }

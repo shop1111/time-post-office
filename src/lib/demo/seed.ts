@@ -10,6 +10,7 @@ const DAY = 86_400_000;
 
 export async function clearAll() {
   await db.$transaction([
+    db.job.deleteMany(),
     db.memoryEntity.deleteMany(),
     db.memory.deleteMany(),
     db.entity.deleteMany(),

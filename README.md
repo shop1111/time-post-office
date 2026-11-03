@@ -57,7 +57,7 @@ score = 1.0·语义相似 + 0.35·0.5^(Δt/45天) + 0.45·重要度 + 0.5·实�
 
 | 角色 | 默认 | 未配置时 |
 | --- | --- | --- |
-| CHAT 对话/写信/抽取 | DeepSeek `deepseek-chat` | Mock 演示模式：规则抽取器 + 模板写信器 + 文风指纹 |
+| CHAT 对话/写信/抽取 | DeepSeek `deepseek-flash`（可选 `deepseek-v4-pro`，支持思考模式） | Mock 演示模式：规则抽取器 + 模板写信器 + 文风指纹 |
 | VISION 看图 | 通义 Qwen-VL / 硅基流动 Qwen2.5-VL | EXIF + 用户文字兜底 |
 | EMBED 向量 | 本地 lite（中文 n-gram 哈希向量，零依赖） | — 可切 `api` 用 bge-m3 |
 | ASR 语音 | 浏览器 Web Speech 实时转写 | 可选 SenseVoice 服务端转写 |
@@ -79,7 +79,7 @@ npm run dev
 
 打开 http://localhost:3000 。
 
-接入 DeepSeek：在 `.env` 中填 `CHAT_API_KEY`，重启即可。DeepSeek 官方 API 不支持图片，如需看图请另外配置 `VISION_*`（见 `.env.example`）。
+接入 DeepSeek：在 `.env` 中填 `CHAT_API_KEY`，重启即可。DeepSeek 当前的 `deepseek-flash` 支持图片理解（[官方能力表](https://api-docs.deepseek.com/quick_start/pricing/)），本项目仍按角色独立配置，看图请设置 `VISION_*`（见 `.env.example`）。
 
 ```bash
 npm test          # 单元测试

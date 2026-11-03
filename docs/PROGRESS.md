@@ -114,7 +114,7 @@
 | UI | React 19、Tailwind CSS 4、framer-motion、lucide-react |
 | 数据 | Prisma 6 + SQLite（向量以 Float32 BLOB 存储） |
 | 校验 | zod |
-| AI 接入 | OpenAI 兼容协议（默认 DeepSeek `deepseek-chat`；视觉可用通义千问 / 硅基流动；向量可用 bge-m3；语音可用 SenseVoice） |
+| AI 接入 | OpenAI 兼容协议（默认 DeepSeek `deepseek-flash`（base_url `https://api.deepseek.com`，可开启思考模式）；视觉可用通义千问 / 硅基流动；向量可用 bge-m3；语音可用 SenseVoice） |
 | 浏览器能力 | MediaRecorder、Web Audio（AnalyserNode）、Web Speech API、Canvas 图片压缩 |
 | 可视化 | recharts（情绪曲线）、react-force-graph-2d（关系图谱） |
 | 其它 | exifr（EXIF）、html-to-image（卡片导出） |
