@@ -13,14 +13,24 @@ export function RecapView({ month, initial }: { month: string; initial: RecapPay
   const [loading, setLoading] = useState(!initial);
   const [empty, setEmpty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const poster = useRef<HTMLDivElement>(null);
 
   async function build() {
     setLoading(true);
-    const r = await fetch(`/api/recap/${month}`, { method: "POST" }).then((r) => r.json());
-    setRecap(r.recap);
-    setEmpty(!r.recap);
-    setLoading(false);
+    setError("");
+    try {
+      const response = await fetch(`/api/recap/${month}`, { method: "POST" });
+      const r = await response.json();
+      if (!response.ok) throw new Error(r.error ?? "月度回忆生成失败，请重试");
+      setRecap(r.recap);
+      setEmpty(!r.recap);
+    } catch (error) {
+      setRecap(null);
+      setError(error instanceof Error ? error.message : "网络连接失败，请重试");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -50,6 +60,7 @@ export function RecapView({ month, initial }: { month: string; initial: RecapPay
         <p className="text-xs text-ink-3">统计情绪曲线 · 找出高光时刻 · 写一段月度叙事</p>
       </div>
     );
+  if (error) return <div className="card mt-8 space-y-3 p-6"><p role="alert">{error}</p><button className="btn btn-ghost" onClick={build}>重新生成月度回忆</button></div>;
   if (empty || !recap)
     return <p className="mt-16 text-center text-ink-3">这个月没有寄存任何生活。</p>;
 

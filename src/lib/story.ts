@@ -3,8 +3,9 @@ import { db, parseJson } from "@/lib/db";
 import { chatJson } from "@/lib/ai/json";
 import { storyMessages, recapMessages } from "@/lib/ai/prompts";
 import { mockStory, mockRecap } from "@/lib/ai/mock";
-import { styleText, getProfile } from "@/lib/memory/profile";
+import { styleText } from "@/lib/memory/profile";
 import { fmtDate } from "@/lib/memory/retrieve";
+import { assertDerivedRevision, getDerivedRevision } from "@/lib/memory/consistency";
 
 const StorySchema = z.object({
   title: z.string().min(1).max(30),
@@ -50,6 +51,7 @@ export async function generateStoryCard(entryId: string) {
 }
 
 export interface RecapPayload {
+  derivedRevision?: number;
   month: string;
   title: string;
   narrative: string;
@@ -68,21 +70,35 @@ export interface RecapPayload {
   };
 }
 
+/** Legacy or stale caches must not bypass the shared revision protocol. */
+export async function getCachedRecap(month: string): Promise<RecapPayload | null> {
+  return db.$transaction(async (tx) => {
+    const revision = await getDerivedRevision(tx);
+    const row = await tx.monthlyRecap.findUnique({ where: { month } });
+    const payload = row ? parseJson<RecapPayload | null>(row.payload, null) : null;
+    return payload?.derivedRevision === revision ? payload : null;
+  });
+}
+
 export async function buildRecap(month: string, force = false): Promise<RecapPayload | null> {
-  if (!force) {
-    const cached = await db.monthlyRecap.findUnique({ where: { month } });
-    if (cached) return parseJson<RecapPayload | null>(cached.payload, null);
-  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("无效的月份");
   const [y, m] = month.split("-").map(Number);
   const start = new Date(y, m - 1, 1);
   const end = new Date(y, m, 1);
-  const entries = await db.entry.findMany({ where: { occurredAt: { gte: start, lt: end } }, orderBy: { occurredAt: "asc" } });
+  const { entries, memories, revision, cached, name } = await db.$transaction(async (tx) => ({
+    revision: await getDerivedRevision(tx),
+    cached: force ? null : await tx.monthlyRecap.findUnique({ where: { month } }),
+    entries: await tx.entry.findMany({ where: { occurredAt: { gte: start, lt: end } }, orderBy: { occurredAt: "asc" } }),
+    memories: await tx.memory.findMany({
+      where: { status: "active", occurredAt: { gte: start, lt: end } },
+      include: { entities: { include: { entity: true } } },
+      orderBy: [{ importance: "desc" }],
+    }),
+    name: (await tx.profile.findUnique({ where: { id: "me" } }))?.name ?? "你",
+  }));
+  const cachedPayload = cached ? parseJson<RecapPayload | null>(cached.payload, null) : null;
+  if (cachedPayload?.derivedRevision === revision) return cachedPayload;
   if (!entries.length) return null;
-  const memories = await db.memory.findMany({
-    where: { occurredAt: { gte: start, lt: end } },
-    include: { entities: { include: { entity: true } } },
-    orderBy: [{ importance: "desc" }],
-  });
 
   const tally = (type: string) => {
     const c = new Map<string, number>();
@@ -109,7 +125,6 @@ export async function buildRecap(month: string, force = false): Promise<RecapPay
     photos: entries.filter((e) => e.photoPath).map((e) => ({ entryId: e.id, photoPath: e.photoPath! })),
   };
 
-  const profile = await getProfile();
   const top = memories.slice(0, 14);
   const ai = await chatJson(
     z.object({
@@ -121,7 +136,7 @@ export async function buildRecap(month: string, force = false): Promise<RecapPay
     }),
     recapMessages({
       month: `${y}年${m}月`,
-      name: profile.name,
+      name,
       stats: `记录 ${stats.count} 条（${Object.entries(byType).map(([k, v]) => `${k}:${v}`).join("，")}）；平均情绪 ${stats.avgMood}；常见的人：${topPeople.map((p) => p.name).join("、") || "无"}；去过：${topPlaces.map((p) => p.name).join("、") || "无"}；情绪词：${stats.emotions.map((e) => e.name).join("、")}`,
       memories: top.map((x) => `[${x.id}] ${x.occurredAt.getMonth() + 1}/${x.occurredAt.getDate()} ${x.content}（重要度${x.importance}）`).join("\n"),
     }),
@@ -148,7 +163,10 @@ export async function buildRecap(month: string, force = false): Promise<RecapPay
       };
     });
 
-  const payload: RecapPayload = { month, title: ai.title, narrative: ai.narrative, keywords: ai.keywords, nextMonthNote: ai.nextMonthNote, highlights, stats };
-  await db.monthlyRecap.upsert({ where: { month }, update: { payload: JSON.stringify(payload) }, create: { month, payload: JSON.stringify(payload) } });
+  const payload: RecapPayload = { derivedRevision: revision, month, title: ai.title, narrative: ai.narrative, keywords: ai.keywords, nextMonthNote: ai.nextMonthNote, highlights, stats };
+  await db.$transaction(async (tx) => {
+    await assertDerivedRevision(tx, revision);
+    await tx.monthlyRecap.upsert({ where: { month }, update: { payload: JSON.stringify(payload) }, create: { month, payload: JSON.stringify(payload) } });
+  });
   return payload;
 }

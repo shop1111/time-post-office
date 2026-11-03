@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import { db, parseJson } from "@/lib/db";
 import { RecapView } from "@/components/recap/RecapView";
-import type { RecapPayload } from "@/lib/story";
+import { getCachedRecap } from "@/lib/story";
 
 function shift(month: string, d: number) {
   const [y, m] = month.split("-").map(Number);
@@ -12,8 +11,7 @@ function shift(month: string, d: number) {
 
 export default async function RecapPage({ params }: { params: Promise<{ month: string }> }) {
   const { month } = await params;
-  const cached = await db.monthlyRecap.findUnique({ where: { month } });
-  const recap = cached ? parseJson<RecapPayload | null>(cached.payload, null) : null;
+  const recap = await getCachedRecap(month);
   const [y, m] = month.split("-").map(Number);
   return (
     <div className="mx-auto max-w-3xl">

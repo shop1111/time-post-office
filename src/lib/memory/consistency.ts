@@ -22,6 +22,27 @@ export interface InvalidateDerivedResult {
 export const DERIVED_REVISION_KEY = "memory.derivedRevision";
 export const PROFILE_REVISION_KEY = "memory.profileBuiltRevision";
 
+export class DerivedDataConflictError extends Error {
+  constructor() {
+    super("记忆已发生变化，本次生成结果未保存，请重新生成。");
+    this.name = "DerivedDataConflictError";
+  }
+}
+
+export async function getDerivedRevision(tx: Pick<Prisma.TransactionClient, "setting">): Promise<number> {
+  const row = await tx.setting.findUnique({ where: { key: DERIVED_REVISION_KEY } });
+  if (!row) return 0;
+  const value = Number(row.value);
+  if (!/^(0|[1-9]\d*)$/.test(row.value) || !Number.isSafeInteger(value)) {
+    throw new Error("Invalid memory derived revision");
+  }
+  return value;
+}
+
+export async function assertDerivedRevision(tx: Prisma.TransactionClient, expected: number) {
+  if (await getDerivedRevision(tx) !== expected) throw new DerivedDataConflictError();
+}
+
 const REASONS: readonly InvalidationReason[] = [
   "memory_created", "memory_corrected", "memory_retracted", "entry_deleted",
 ];

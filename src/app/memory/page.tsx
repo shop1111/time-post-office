@@ -1,48 +1,36 @@
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/memory/profile";
-import { MemoryGraph, type GraphData } from "@/components/memory/MemoryGraph";
+import { MemoryGraph } from "@/components/memory/MemoryGraph";
+import { buildMemoryGraph } from "@/lib/memory/graph";
 import { MemoryList } from "@/components/memory/MemoryList";
 import { RefreshProfile } from "@/components/memory/RefreshProfile";
 
 export default async function MemoryPage() {
-  const [profile, memories, entities] = await Promise.all([
+  const [profile, memories] = await Promise.all([
     getProfile(),
     db.memory.findMany({ orderBy: { occurredAt: "desc" }, include: { entities: { include: { entity: true } } } }),
-    db.entity.findMany({ include: { _count: { select: { memories: true } } } }),
   ]);
 
-  // 实体图谱：我 → 实体；同一条记忆里共同出现的实体互相连线
-  const co = new Map<string, number>();
-  for (const m of memories) {
-    const ids = m.entities.map((e) => e.entityId).sort();
-    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) co.set(`${ids[i]}|${ids[j]}`, (co.get(`${ids[i]}|${ids[j]}`) ?? 0) + 1);
-  }
-  const graph: GraphData = {
-    nodes: [{ id: "me", name: profile.name, type: "me", val: 10 }, ...entities.filter((e) => e._count.memories > 0).map((e) => ({ id: e.id, name: e.name, type: e.type, val: 2 + e._count.memories * 1.5 }))],
-    links: [
-      ...entities.filter((e) => e._count.memories > 0).map((e) => ({ source: "me", target: e.id, value: e._count.memories })),
-      ...[...co.entries()].map(([k, v]) => {
-        const [a, b] = k.split("|");
-        return { source: a, target: b, value: v };
-      }),
-    ],
-  };
+  const graph = buildMemoryGraph(profile.name, memories);
+  const activeCount = memories.filter((m) => m.status === "active").length;
   const style = profile.styleData;
 
   return (
     <div className="space-y-8">
       <header>
         <h1 className="font-hand text-3xl">记忆宫殿</h1>
-        <p className="mt-1 text-sm text-ink-2">邮差记住的关于你的一切都在这里。记错了可以改，不想被记住可以删——记忆属于你。</p>
+        <p className="mt-1 text-sm text-ink-2">记错了可以更正，不想用于长期记忆可以撤回。记忆由你掌控。</p>
+        <p className="mt-2 text-xs leading-6 text-ink-3">撤回会保留操作记录，原始日记和历史信件仍在；不等同于删除全部相关内容。</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-5">
         <div className="card p-5 md:col-span-3">
           <div className="flex items-center justify-between">
             <h2 className="font-hand text-xl">AI 眼中的你</h2>
-            <RefreshProfile />
+            <RefreshProfile stale={profile.isStale} />
           </div>
-          <p className="mt-3 text-[15px] leading-7">{profile.summary || "还在慢慢认识你。"}</p>
+          {profile.isStale && <span className="chip mt-3 !bg-gold/20">画像待更新</span>}
+          <p className="mt-3 text-[15px] leading-7">{profile.isStale ? "请根据当前有效记忆更新画像，旧结论已暂停使用。" : profile.summary || "还在慢慢认识你。"}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {profile.traitsList.map((t) => (
               <span key={t} className="chip !bg-stamp-soft !text-stamp">
@@ -75,7 +63,7 @@ export default async function MemoryPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 font-hand text-xl">全部记忆 · {memories.length}</h2>
+        <h2 className="mb-3 font-hand text-xl">记忆管理 · {activeCount} 条有效记忆</h2>
         <MemoryList
           items={memories.map((m) => ({
             id: m.id,
@@ -88,7 +76,10 @@ export default async function MemoryPage() {
             entryId: m.entryId,
             recallCount: m.recallCount,
             userEdited: m.userEdited,
-            entities: m.entities.map((e) => e.entity.name),
+            status: m.status,
+            revision: m.revision,
+            retractedAt: m.retractedAt?.toISOString() ?? null,
+            entities: m.entities.map((e) => ({ name: e.entity.name, type: e.entity.type as "person" | "place" | "theme" })),
           }))}
         />
       </section>

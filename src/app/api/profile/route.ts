@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { refreshProfile } from "@/lib/memory/profile";
+import { memoryErrorResponse } from "@/lib/memory/errors";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,10 @@ export async function PATCH(req: Request) {
 }
 
 export async function POST() {
-  await refreshProfile();
-  return NextResponse.json({ ok: true });
+  try {
+    const result = await refreshProfile();
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error) {
+    return memoryErrorResponse(error);
+  }
 }
