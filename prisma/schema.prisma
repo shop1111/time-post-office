@@ -59,6 +59,9 @@ model Memory {
   lastRecalledAt DateTime?
   recallCount    Int            @default(0)
   userEdited     Boolean        @default(false)
+  status         String         @default("active") // active | retracted
+  revision       Int            @default(0)
+  retractedAt    DateTime?
   resolved       Boolean        @default(false)
   createdAt      DateTime       @default(now())
   entities       MemoryEntity[]
