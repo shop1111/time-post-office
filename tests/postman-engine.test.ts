@@ -139,7 +139,8 @@ describe("postman actual decisions", () => {
     const check = result.decisions[0].stages.find((s) => s.name === "check");
     expect(check).toMatchObject({ status: success ? "completed" : "failed", execution: { mode: success ? "remote" : "fallback" } });
     expect(result.decisions[0].outcome).toBe("generated");
-    // M3字段暂不实现，数据库默认保持unchecked。
-    expect((await db.letter.findFirstOrThrow()).checkStatus).toBe("unchecked");
+    const letter = await db.letter.findFirstOrThrow();
+    expect(letter.checkStatus).toBe(success ? "passed" : "unchecked");
+    expect(letter.reason).toBe("测试候选");
   });
 });

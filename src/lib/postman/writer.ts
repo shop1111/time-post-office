@@ -1,15 +1,16 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { chat, isMock } from "@/lib/ai/provider";
+import { isMock } from "@/lib/ai/provider";
 import { chatJson } from "@/lib/ai/json";
-import { letterMessages, rewriteMessages, selfCheckMessages } from "@/lib/ai/prompts";
+import { letterMessages } from "@/lib/ai/prompts";
 import { mockLetter } from "@/lib/ai/mock";
 import { retrieve, formatMemories, fmtDate, type RetrievedMemory } from "@/lib/memory/retrieve";
 import { NOSTALGIA_WEIGHTS } from "@/lib/memory/rank";
 import { getProfile, styleText } from "@/lib/memory/profile";
 import type { ExecutionInfo, PostmanStage, PostmanStageInfo } from "@/lib/types";
 import type { LetterCandidate } from "./triggers";
+import { checkLetter } from "./check";
 
 export class AlreadySentError extends Error {
   constructor(public readonly letterId: string) { super("Trigger already has a letter"); this.name = "AlreadySentError"; }
@@ -29,7 +30,7 @@ function summarize(infos: ExecutionInfo[]): ExecutionInfo | undefined {
 }
 
 export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stage: PostmanStageInfo) => void) {
-  async function stage<T>(name: PostmanStage, work: (capture: (info: ExecutionInfo) => void) => Promise<T>, skip = false): Promise<T> {
+  async function stage<T>(name: PostmanStage, work: (capture: (info: ExecutionInfo) => void) => Promise<T>, skip = false, failed?: (value: T) => boolean): Promise<T> {
     const started = Date.now();
     const infos: ExecutionInfo[] = [];
     if (!skip) onStage?.({ name, status: "started" });
@@ -37,7 +38,7 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
       const value = await work((info) => infos.push(info));
       const execution = summarize(infos);
       // completed 是执行完成，不代表 M3 的事实核查 verdict；核查降级不能标成完成。
-      const status = skip ? "skipped" : name === "check" && execution?.mode !== "remote" ? "failed" : "completed";
+      const status = skip ? "skipped" : failed?.(value) ? "failed" : "completed";
       onStage?.({ name, status, durationMs: Date.now() - started, ...(execution ? { execution } : {}) });
       return value;
     } catch (error) {
@@ -72,33 +73,17 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
     });
   });
 
-  const skipCheck = isMock();
-  const { body, cited, checked } = await stage("check", async (onExecution) => {
-    const validIds = new Set(mems.map((m) => m.id));
-    let cited = draft.cited.filter((id) => validIds.has(id));
-    if (!cited.length) cited = c.anchorMemoryIds.filter((id) => validIds.has(id));
-    let body = draft.body;
-    let checked = "引用校验通过";
-    if (!skipCheck) {
-      const infos: ExecutionInfo[] = [];
-      const capture = (info: ExecutionInfo) => { infos.push(info); onExecution(info); };
-      const check = await chatJson(z.object({ ok: z.boolean(), issues: z.array(z.string()).default([]) }), selfCheckMessages(body, memText), {
-        mock: () => ({ ok: true, issues: [] }), temperature: 0, onExecution: capture,
-      });
-      if (!check.ok && check.issues.length) {
-        body = await chat(rewriteMessages(body, check.issues, memText), { temperature: 0.5, maxTokens: 1400, mock: () => body, onExecution: capture });
-        checked = `已修正 ${check.issues.length} 处无依据表述`;
-      } else checked = "事实核查通过";
-      if (infos.some((info) => info.mode !== "remote")) checked = "事实核查未完成";
-    }
-    return { body, cited, checked };
-  }, skipCheck);
+  const validIds = new Set(mems.map((m) => m.id));
+  let cited = [...new Set(draft.cited.filter((id) => validIds.has(id)))];
+  if (!cited.length) cited = c.anchorMemoryIds.filter((id) => validIds.has(id));
+  const checked = await stage("check", (onExecution) => checkLetter(draft.body, memText, { onExecution }), isMock(),
+    (result) => result.checkStatus === "unchecked" || result.checkStatus === "failed");
 
   return stage("deliver", async () => {
     try {
       return await db.letter.create({ data: {
-        sender: c.sender, subject: draft.subject, body: body.trim(), triggerType: c.type, triggerKey: c.key,
-        reason: `${c.reason}。（${checked}）`, citedMemoryIds: JSON.stringify(cited), writtenAt: c.writtenAt, scheduledAt: now, deliveredAt: now,
+        sender: c.sender, subject: draft.subject, body: checked.body.trim(), triggerType: c.type, triggerKey: c.key,
+        reason: c.reason, checkStatus: checked.checkStatus, checkNote: checked.checkNote, citedMemoryIds: JSON.stringify(cited), writtenAt: c.writtenAt, scheduledAt: now, deliveredAt: now,
       } });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
