@@ -1,3 +1,5 @@
+import type { RankWeights } from "@/lib/memory/rank";
+
 export type EntryType = "photo" | "voice" | "text";
 export type MemoryKind = "event" | "fact" | "person" | "place" | "goal" | "plan" | "preference";
 export type EntityType = "person" | "place" | "theme";
@@ -66,6 +68,7 @@ export interface InterviewMetaEvent {
   round: number;
   maxRounds: number;
   final: boolean;
+  weights: RankWeights;
   related: Array<{
     id: string; content: string; date: string; score: number; entryId: string | null;
     parts: { sim: number; recency: number; importance: number; entity: number };

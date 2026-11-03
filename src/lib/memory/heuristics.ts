@@ -59,14 +59,11 @@ export function resolveDue(sentence: string, base: Date): Date | null {
   return null;
 }
 
-export function extractHeuristic(
-  input: { text: string; place?: string | null; occurredAt: Date; caption?: string | null },
+export function recognizeEntities(
+  text: string,
+  place?: string | null,
   known: Array<{ name: string; type: EntityType }> = [],
-): Extraction {
-  const text = [input.text, input.caption].filter(Boolean).join("。");
-  const sentences = splitSentences(text);
-  const { mood, emotions } = analyzeMood(text);
-
+) {
   const people = new Set<string>();
   for (const f of FAMILY) if (text.includes(f)) people.add(f);
   for (const m of text.matchAll(/(?:和|跟|与|陪)([一-鿿]{2,3}?)(?:一起|去|在|聊|吃|逛|走|说)/g)) {
@@ -74,7 +71,7 @@ export function extractHeuristic(
     if (!/^(大家|朋友|他们|我们|自己|家人)$/.test(name)) people.add(name);
   }
   const places = new Set<string>();
-  if (input.place) places.add(input.place);
+  if (place) places.add(place);
   for (const c of CITIES) if (text.includes(c)) places.add(c);
   for (const k of known) {
     if (k.name.length >= 2 && text.includes(k.name)) (k.type === "place" ? places : k.type === "person" ? people : new Set()).add(k.name);
@@ -82,10 +79,21 @@ export function extractHeuristic(
   // 去掉被更长地名包含的短地名
   for (const p of [...places]) if ([...places].some((q) => q !== p && q.includes(p))) places.delete(p);
 
-  const ents = [
+  return [
     ...[...people].map((name) => ({ name, type: "person" as const })),
     ...[...places].map((name) => ({ name, type: "place" as const })),
   ];
+}
+
+export function extractHeuristic(
+  input: { text: string; place?: string | null; occurredAt: Date; caption?: string | null },
+  known: Array<{ name: string; type: EntityType }> = [],
+): Extraction {
+  const text = [input.text, input.caption].filter(Boolean).join("。");
+  const sentences = splitSentences(text);
+  const { mood, emotions } = analyzeMood(text);
+  const ents = recognizeEntities(text, input.place, known);
+  const places = new Set(ents.filter((e) => e.type === "place").map((e) => e.name));
   const entsIn = (s: string) => ents.filter((e) => s.includes(e.name));
 
   const memories: ExtractedMemory[] = [];
