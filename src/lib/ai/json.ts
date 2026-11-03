@@ -51,6 +51,8 @@ export async function chatJson<T extends z.ZodTypeAny>(
     let local: z.infer<T> | undefined;
     const raw = await chat(history, {
       json: true,
+      // 截断的 JSON 交给下面的修复循环处理，而不是直接降级到本地结果
+      allowTruncated: true,
       temperature: opts.temperature ?? 0.4,
       maxTokens: opts.maxTokens,
       timeoutMs: remaining,
@@ -63,7 +65,10 @@ export async function chatJson<T extends z.ZodTypeAny>(
     try {
       parsed = schema.parse(extractJson(raw));
     } catch (e) {
-      const msg = e instanceof z.ZodError ? e.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; ") : "JSON格式无效";
+      // 发给模型的是 zod 的约束说明（如「最多 160 个字符」），日志里仍只记次数，不记内容
+      const msg = e instanceof z.ZodError
+        ? e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+        : "JSON 不完整或格式无效，可能是输出过长被截断，请精简内容";
       console.warn(`[ai.json] repair ${attempt + 1} bad_json`);
       history.push({ role: "assistant", content: raw });
       history.push({ role: "user", content: `你的输出不符合要求（${msg}）。请只输出修正后的合法 JSON，不要任何解释。` });

@@ -277,6 +277,30 @@ describe("JSON repair budget", () => {
     expect(onExecution).toHaveBeenCalledTimes(1);
     expect(onExecution.mock.calls[0][0].mode).toBe("remote");
   });
+  it("被max_tokens截断的JSON进入修复，而不是直接降级", async () => {
+    let n = 0;
+    const fetcher = fakeFetch(async () => ++n === 1
+      ? Response.json({ choices: [{ message: { content: '{"title":"远程' }, finish_reason: "length" }] })
+      : reply('{"title":"远程标题"}'));
+    const onExecution = vi.fn();
+    expect(await chatJson(schema, messages, { mock: local, onExecution })).toEqual({ title: "远程标题" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(onExecution.mock.calls[0][0].mode).toBe("remote");
+    const repair = JSON.parse(String(fetcher.mock.calls[1][1]?.body)).messages.at(-1).content;
+    expect(repair).toContain("截断");
+  });
+  it("修复提示带上zod的约束说明", async () => {
+    const fetcher = fakeFetch(async () => reply('{"title":123}'));
+    await chatJson(schema, messages, { mock: local, retries: 1 });
+    const repair = JSON.parse(String(fetcher.mock.calls[1][1]?.body)).messages.at(-1).content;
+    expect(repair).toMatch(/title: Expected string/);
+  });
+  it("普通chat仍把截断当作失败降级", async () => {
+    fakeFetch(async () => Response.json({ choices: [{ message: { content: "半封信" }, finish_reason: "length" }] }));
+    const onExecution = vi.fn();
+    expect(await chat(messages, { mock, onExecution })).toBe(mock());
+    expect(onExecution.mock.calls[0][0]).toMatchObject({ mode: "fallback", fallbackReason: "bad_json" });
+  });
   it("修复耗尽返回bad_json而不是假装remote", async () => {
     const fetcher = fakeFetch(async () => reply('{"title":123}'));
     const onExecution = vi.fn();

@@ -13,6 +13,8 @@ export interface CallOptions {
 }
 export interface ChatOptions extends CallOptions {
   temperature?: number; maxTokens?: number; json?: boolean; mock: () => string;
+  /** 返回被 max_tokens 截断的正文（由调用方修复），而不是当作失败降级。 */
+  allowTruncated?: boolean;
 }
 export function roleConfig(role: Role): RoleConfig | null {
   const p = role.toUpperCase();
@@ -53,9 +55,10 @@ export function maxTokensFor(cfg: RoleConfig, base: number) {
 function jsonInit(cfg: RoleConfig, body: unknown): RequestInit {
   return { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` }, body: JSON.stringify(body) };
 }
-function content(data: unknown): string {
+function content(data: unknown, allowTruncated = false): string {
   const choice = (data as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }> })?.choices?.[0];
-  if (choice?.finish_reason === "length" || typeof choice?.message?.content !== "string" || !choice.message.content.trim()) throw new AiFailure("bad_json");
+  if (typeof choice?.message?.content !== "string" || !choice.message.content.trim()) throw new AiFailure("bad_json");
+  if (choice.finish_reason === "length" && !allowTruncated) throw new AiFailure("bad_json");
   return choice.message.content;
 }
 function execution(mode: ExecutionInfo["mode"], started: number, model?: string, fallbackReason?: string): ExecutionInfo {
@@ -88,7 +91,7 @@ export async function chat(messages: ChatMessage[], opts: ChatOptions): Promise<
   return run("chat", roleConfig("chat"), opts, (cfg, budget) => requestJson(`${cfg.baseUrl}/chat/completions`, jsonInit(cfg, {
     model: cfg.model, messages, temperature: opts.temperature ?? 0.8, max_tokens: maxTokensFor(cfg, opts.maxTokens ?? 1200),
     ...thinking(cfg), ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-  }), budget, content), opts.mock);
+  }), budget, (data) => content(data, opts.allowTruncated)), opts.mock);
 }
 /** 已有文字后失败：不重试、不拼接Mock，交由路由输出结构化error。 */
 export class ChatStreamError extends Error {

@@ -217,6 +217,34 @@ describe("finalize with isolated SQLite", () => {
     expect((await get(entry.id)).status).toBe("completed");
     expect((await db.job.findUniqueOrThrow({ where: { id: completed.id } })).status).toBe("completed");
   });
+  it("详情页重新生成卡片后，任务结果返回新卡片", async () => {
+    const entry = await create();
+    const first = await jsonPost(entry.id);
+    const regenerated = await generateStoryCard(entry.id);
+    expect(regenerated.id).not.toBe(first.card?.id);
+    expect((await get(entry.id)).result?.card?.id).toBe(regenerated.id);
+    expect((await jsonPost(entry.id)).card?.id).toBe(regenerated.id);
+  });
+  it("删除记录时一并删除它的任务", async () => {
+    const { DELETE } = await import("@/app/api/entries/[id]/route");
+    const entry = await create();
+    await jsonPost(entry.id);
+    expect(await db.job.count({ where: { targetId: entry.id } })).toBe(1);
+    expect((await DELETE(new Request("http://test/entry", { method: "DELETE" }), context(entry.id))).status).toBe(200);
+    expect(await db.job.count({ where: { targetId: entry.id } })).toBe(0);
+    expect(await db.entry.count({ where: { id: entry.id } })).toBe(0);
+  });
+  it("部分完成后重试会真正重做失败步骤，而不是拿回旧错误", async () => {
+    const entry = await create();
+    vi.mocked(generateStoryCard).mockRejectedValueOnce(new Error("story failed"));
+    const { run } = await startFinalize(entry.id);
+    expect((await run.done).status).toBe("partial");
+    // 紧接着重试：即使旧任务还没来得及从内存表移除，也应开始新的一次
+    const retry = await startFinalize(entry.id);
+    expect(retry.run).not.toBe(run);
+    expect((await retry.run.done).status).toBe("completed");
+    expect(generateStoryCard).toHaveBeenCalledTimes(2);
+  });
   it("缺失记录/任务返回约定404错误体", async () => {
     expect((await POST(request(), context("missing"))).status).toBe(404);
     const entry = await create();
