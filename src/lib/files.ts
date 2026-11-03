@@ -1,4 +1,4 @@
-import { mkdir, writeFile, open } from "fs/promises";
+import { mkdir, writeFile, open, unlink } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 
@@ -26,6 +26,13 @@ export async function openUpload(name: string) {
     if (!stat.isFile()) throw new Error("Upload is not a file");
     return { file, size: stat.size };
   } catch (error) { await file.close(); throw error; }
+}
+
+/** 数据库存的是上传文件名；public插画、API路径或异常路径一律不清理。 */
+export async function deleteUpload(name: string | null) {
+  if (!name || /[/\\:\0]/.test(name) || name === "." || name === "..") return;
+  try { await unlink(path.join(UPLOAD_DIR, uploadName(name))); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 }
 
 /** 仅支持单段bytes；不满足或格式无效返回null，由路由统一416。 */
