@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ChevronDown, Reply } from "lucide-react";
+import { ChevronDown, Square, Volume2 } from "lucide-react";
 import { Postmark, Stamp, SENDER_TEXT } from "./Postal";
-import { useToast } from "./Toast";
 import { TRIGGER_LABEL } from "./postman/labels";
+import { EnvelopeOpening } from "./letter/EnvelopeOpening";
+import { LetterBody } from "./letter/LetterBody";
+import { CheckBadge } from "./letter/CheckBadge";
+import { ReplyBox } from "./letter/ReplyBox";
+import { useReadAloud } from "./letter/useReadAloud";
 import { fmtCN, photoUrl, daysBetween } from "@/lib/utils";
+import type { CheckStatus, LetterSentenceSources } from "@/lib/types";
 
 interface L {
   id: string;
@@ -22,6 +27,8 @@ interface L {
   readAt: string | null;
   reply: string | null;
   repliedAt: string | null;
+  checkStatus: CheckStatus;
+  checkNote: string;
 }
 interface Cited {
   id: string;
@@ -32,84 +39,57 @@ interface Cited {
   title: string | null;
 }
 
-export function LetterView({ l, cited }: { l: L; cited: Cited[] }) {
-  const [opened, setOpened] = useState(!!l.readAt);
+export function LetterView({ l, cited, sentences }: { l: L; cited: Cited[]; sentences: LetterSentenceSources[] }) {
+  // 只看进页面那一刻是否读过：标记已读后页面会刷新，不能因此跳过拆信
+  const [firstRead] = useState(!l.readAt);
+  const [opened, setOpened] = useState(!firstRead);
+  const [reveal, setReveal] = useState(false);
   const [why, setWhy] = useState(false);
-  const [reply, setReply] = useState("");
-  const [sent, setSent] = useState(l.reply);
-  const [busy, setBusy] = useState(false);
   const router = useRouter();
-  const toast = useToast();
   const gap = daysBetween(l.writtenAt, l.deliveredAt);
+  const texts = useMemo(() => sentences.map((s) => s.text), [sentences]);
+  const voice = useReadAloud(texts);
 
   useEffect(() => {
     if (!l.readAt) fetch(`/api/letters/${l.id}`, { method: "POST", body: JSON.stringify({ action: "read" }) }).then(() => router.refresh());
   }, [l.id, l.readAt, router]);
 
-  async function sendReply() {
-    setBusy(true);
-    await fetch(`/api/letters/${l.id}`, { method: "POST", body: JSON.stringify({ action: "reply", reply }) });
-    setBusy(false);
-    setSent(reply);
-    toast("回信已寄出，邮差会把它也好好收起来", "✉️");
-    router.refresh();
-  }
+  const onOpened = useCallback((skipped: boolean) => {
+    setReveal(!skipped);
+    setOpened(true);
+  }, []);
 
-  if (!opened) {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center">
-        <motion.button
-          onClick={() => setOpened(true)}
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          whileHover={{ rotate: -2, scale: 1.02 }}
-          className="relative w-full max-w-md overflow-hidden rounded-xl border border-line bg-card shadow-[var(--shadow)]"
-        >
-          <div className="airmail h-2" />
-          <svg viewBox="0 0 400 120" className="w-full">
-            <path d="M0 0 L200 100 L400 0" fill="var(--paper-2)" stroke="var(--line)" />
-            <circle cx="200" cy="96" r="18" fill="var(--stamp)" />
-            <text x="200" y="102" textAnchor="middle" fontSize="16" fill="#fff">
-              邮
-            </text>
-          </svg>
-          <div className="flex items-end justify-between p-5 pt-0 text-left">
-            <div>
-              <div className="text-xs text-ink-3">{SENDER_TEXT[l.sender]}</div>
-              <div className="mt-1 font-hand text-2xl">{l.subject}</div>
-            </div>
-            <Stamp sender={l.sender} />
-          </div>
-        </motion.button>
-        <p className="mt-6 animate-pulse text-sm text-ink-3">轻触火漆，拆开这封信</p>
-      </div>
-    );
-  }
+  if (!opened) return <EnvelopeOpening sender={l.sender} subject={l.subject} onOpened={onOpened} />;
 
   return (
-    <motion.article initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", damping: 20 }} className="mt-4">
+    <motion.article initial={firstRead ? { opacity: 0, y: 40 } : false} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", damping: 20 }} className="mt-4">
       <div className="relative rounded-2xl border border-line bg-card shadow-[var(--shadow)]">
         <div className="airmail h-1.5 rounded-t-2xl" />
-        <div className="flex items-start justify-between px-6 pt-5">
-          <div>
+        <div className="flex items-start justify-between gap-3 px-6 pt-5">
+          <div className="min-w-0">
             <div className="text-xs tracking-wider text-ink-3">{SENDER_TEXT[l.sender]}</div>
             <h1 className="mt-1 font-hand text-2xl md:text-3xl">{l.subject}</h1>
             <div className="mt-1 text-xs text-ink-3">
               {fmtCN(l.writtenAt)} 寄出 · {fmtCN(l.deliveredAt)} 送达{gap > 1 ? ` · 在路上走了 ${gap} 天` : ""}
             </div>
+            {l.sender !== "user" && <CheckBadge className="mt-2" status={l.checkStatus} note={l.checkNote} />}
           </div>
-          <div className="relative">
+          <div className="relative shrink-0">
             <Stamp sender={l.sender} />
-            <Postmark date={l.writtenAt} className="absolute -bottom-10 -left-10 h-20 w-20" />
+            {/* 手机上邮戳会盖住寄出/送达日期，只在宽屏显示 */}
+            <Postmark date={l.writtenAt} className="absolute -bottom-10 -left-10 hidden h-20 w-20 sm:block" />
           </div>
         </div>
-        <div className="letter-paper mx-3 mb-3 mt-6 whitespace-pre-wrap rounded-xl px-5 py-[14px] font-hand text-[18px] md:px-8">
-          {l.body.split("").map((ch, i) => (
-            <motion.span key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i * 0.012, 3) }}>
-              {ch}
-            </motion.span>
-          ))}
-        </div>
+
+        {voice.supported && (
+          <div className="mt-4 flex justify-end px-6">
+            <button onClick={voice.reading >= 0 ? voice.stop : voice.start} className="btn btn-ghost !px-3 !py-1 text-xs" aria-pressed={voice.reading >= 0}>
+              {voice.reading >= 0 ? <Square size={12} /> : <Volume2 size={14} />}
+              {voice.reading >= 0 ? "停止朗读" : "朗读这封信"}
+            </button>
+          </div>
+        )}
+        <LetterBody sentences={sentences} reveal={reveal} reading={voice.reading} />
       </div>
 
       {/* 可解释性：为什么收到这封信 */}
@@ -149,31 +129,7 @@ export function LetterView({ l, cited }: { l: L; cited: Cited[] }) {
         )}
       </div>
 
-      {/* 回信 */}
-      {l.sender !== "user" && (
-        <div className="card mt-4 p-5">
-          {sent ? (
-            <div>
-              <div className="flex items-center gap-2 text-sm text-ink-3">
-                <Reply size={14} /> 你的回信
-              </div>
-              <p className="mt-2 whitespace-pre-wrap font-hand text-lg leading-8">{sent}</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 text-sm text-ink-2">
-                <Reply size={14} /> 给{l.sender === "past_self" ? "过去的自己" : l.sender === "future_self" ? "未来的自己" : "邮差"}回一封信
-              </div>
-              <textarea className="input mt-3 min-h-[110px] font-hand text-lg" placeholder="回信也会成为你的一段记录" value={reply} onChange={(e) => setReply(e.target.value)} />
-              <div className="mt-3 flex justify-end">
-                <button className="btn btn-primary" disabled={busy || !reply.trim()} onClick={sendReply}>
-                  寄出回信
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {l.sender !== "user" && <ReplyBox letterId={l.id} sender={l.sender} triggerType={l.triggerType} initialReply={l.reply} />}
     </motion.article>
   );
 }

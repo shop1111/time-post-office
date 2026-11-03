@@ -187,6 +187,26 @@ body {
   display: none;
 }
 
+/* 拆信后正文逐字浮现 */
+.ink-in {
+  animation: ink-in 0.5s ease-out both;
+}
+@keyframes ink-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-in {
+    animation: none;
+  }
+}
+
 /* 时光机过场：固定夜色，不随浅色/深色切换。里面的组件照常用 token，自动换成夜色版本 */
 .night-scope {
   --paper: #141a2a;
