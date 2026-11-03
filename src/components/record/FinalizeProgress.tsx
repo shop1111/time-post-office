@@ -47,7 +47,7 @@ export function FinalizeProgress({
         <h2 className="font-hand text-xl">{reconnecting ? "连接断了，正在查询进度…" : HEAD[phase]}</h2>
         {settled && total > 0 && <span className="shrink-0 text-xs text-ink-3">共 {fmtDuration(total)}</span>}
       </div>
-      {reused && <p className="mt-1 text-xs text-ink-3">这条记录之前处理过：已完成的步骤直接沿用，记忆不会重复保存。</p>}
+      {reused && <p className="mt-1 text-xs text-ink-3">接着上次的进度：已完成的步骤直接沿用，记忆不会重复保存。</p>}
 
       <ol className="mt-4 space-y-1">
         {STAGE_INFO.map(({ key, label, hint }, i) => {
