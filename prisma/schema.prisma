@@ -111,6 +111,7 @@ model Letter {
   checkStatus    String    @default("unchecked")
   checkNote      String    @default("")
   citedMemoryIds String    @default("[]") // JSON string[]
+  citedSnapshot  String    @default("[]") // 写信时核对过的记忆原文快照 JSON
   writtenAt      DateTime  @default(now()) // 落款时间（"过去的你"可早于现在）
   scheduledAt    DateTime
   deliveredAt    DateTime?

@@ -47,6 +47,8 @@ describe("postman actual decisions", () => {
     expect(result.decisions[0].existingLetterId).toBe(old.id);
     expect(result.decisions.map((d) => d.rank)).toEqual(Array.from({ length: 10 }, (_, i) => i + 1));
     expect(result.candidates).toHaveLength(8); expect(result.totalCandidates).toBe(10);
+    expect(result.decisions.map((d) => d.reason)).toEqual(candidates.map((c) => c.reason));
+    expect(events.every((d) => d.reason === candidates.find((c) => c.key === d.key)!.reason)).toBe(true);
     expect(events.filter((d) => d.key === "loop1").map((d) => d.outcome)).toEqual(["selected", "generated"]);
     expect(writeLetter).toHaveBeenCalledTimes(2);
     const phases = result.decisions[1].stages;
@@ -83,6 +85,7 @@ describe("postman actual decisions", () => {
     const result = await tick({ now: NOW, maxLetters: 2, onStage: (s) => events.push(s) });
     expect(result.decisions.map((d) => d.outcome)).toEqual(["failed", "generated", "quota_limited"]);
     expect(result.decisions[0].error).toMatchObject({ code: "POSTMAN_GENERATE_FAILED", retryable: true });
+    expect(result.decisions[0].reason).toBe("测试候选");
     expect(events.filter((s) => s.key === "bad" && s.status !== "started").map((s) => [s.name, s.status])).toEqual([["retrieve", "completed"], ["generate", "failed"], ["check", "skipped"], ["deliver", "skipped"]]);
     expect(await db.letter.count()).toBe(1);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("PostmanDebugFailure: Intentional"));
@@ -98,6 +101,7 @@ describe("postman actual decisions", () => {
     vi.mocked(writeLetter).mockImplementationOnce(async (...args) => { oldId = (await existing("raced")).id; return realWrite(...args); });
     const result = await tick({ now: NOW, maxLetters: 2 });
     expect(result.decisions[0]).toMatchObject({ outcome: "deduplicated", existingLetterId: oldId });
+    expect(result.decisions[0].reason).toBe("测试候选");
     expect(result.decisions[0].stages.at(-1)).toMatchObject({ name: "deliver", status: "skipped" });
     expect(result.decisions[1].outcome).toBe("generated");
     expect(await db.letter.count({ where: { triggerKey: "raced" } })).toBe(1);
@@ -135,7 +139,8 @@ describe("postman actual decisions", () => {
     const check = result.decisions[0].stages.find((s) => s.name === "check");
     expect(check).toMatchObject({ status: success ? "completed" : "failed", execution: { mode: success ? "remote" : "fallback" } });
     expect(result.decisions[0].outcome).toBe("generated");
-    // M3字段暂不实现，数据库默认保持unchecked。
-    expect((await db.letter.findFirstOrThrow()).checkStatus).toBe("unchecked");
+    const letter = await db.letter.findFirstOrThrow();
+    expect(letter.checkStatus).toBe(success ? "passed" : "unchecked");
+    expect(letter.reason).toBe("测试候选");
   });
 });

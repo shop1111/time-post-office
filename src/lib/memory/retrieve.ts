@@ -34,6 +34,7 @@ export async function retrieve(opts: {
   const rows = await db.memory.findMany({
     where: {
       ...(opts.before ? { occurredAt: { lt: opts.before } } : {}),
+      ...(opts.before ? { OR: [{ entryId: null }, { entry: { occurredAt: { lt: opts.before } } }] } : {}),
       ...(opts.excludeEntryId ? { NOT: { entryId: opts.excludeEntryId } } : {}),
       ...(opts.kinds ? { kind: { in: opts.kinds } } : {}),
     },
