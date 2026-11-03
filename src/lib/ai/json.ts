@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { chat, callTimeout, roleConfig, type CallOptions, type ChatMessage } from "./provider";
 import type { ExecutionInfo } from "@/lib/types";
+import { reportJsonExecution } from "./execution";
 
 /** 从模型输出中提取 JSON：容忍 ```json 代码块、前后废话、尾逗号、中文引号 */
 export function extractJson(raw: string): unknown {
@@ -33,7 +34,9 @@ export async function chatJson<T extends z.ZodTypeAny>(
   const started = Date.now();
   const deadline = started + callTimeout("chat", opts);
   const finish = (value: z.infer<T>, info: ExecutionInfo) => {
-    opts.onExecution?.({ ...info, durationMs: Date.now() - started });
+    const execution = { ...info, durationMs: Date.now() - started };
+    reportJsonExecution(execution);
+    opts.onExecution?.(execution);
     return value;
   };
   const fallback = (reason: string) => {
