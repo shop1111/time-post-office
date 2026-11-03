@@ -1,3 +1,11 @@
+/** 流开始前的 HTTP 失败：保留通用错误体的 code，前端据此区分「占用」「已达上限」等情况。 */
+export class SSEHttpError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code?: string, public readonly retryable = false) {
+    super(message);
+    this.name = "SSEHttpError";
+  }
+}
+
 /** 浏览器端 SSE（POST）；第四个可选参数兼容原来的三个参数调用。 */
 export async function postSSE(
   url: string,
@@ -9,8 +17,8 @@ export async function postSSE(
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: options.signal });
   if (!res.ok || !res.body) {
-    const error = await res.json().catch(() => null) as { error?: string } | null;
-    throw new Error(error?.error ?? `请求失败 ${res.status}`);
+    const error = await res.json().catch(() => null) as { error?: string; code?: string; retryable?: boolean } | null;
+    throw new SSEHttpError(error?.error ?? `请求失败 ${res.status}`, res.status, error?.code, error?.retryable ?? false);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
