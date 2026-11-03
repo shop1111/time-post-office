@@ -12,6 +12,7 @@ import type { ExecutionInfo, PostmanStage, PostmanStageInfo } from "@/lib/types"
 import type { LetterCandidate } from "./triggers";
 import { checkLetter } from "./check";
 import { historicalStyle, writtenDayEnd } from "./history";
+import { verifiedSnapshots } from "@/lib/letters/snapshot";
 
 export class AlreadySentError extends Error {
   constructor(public readonly letterId: string) { super("Trigger already has a letter"); this.name = "AlreadySentError"; }
@@ -88,10 +89,16 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
 
   return stage("deliver", async () => {
     try {
-      return await db.letter.create({ data: {
-        sender: c.sender, subject: draft.subject, body: checked.body.trim(), triggerType: c.type, triggerKey: c.key,
-        reason: c.reason, checkStatus: checked.checkStatus, checkNote: checked.checkNote, citedMemoryIds: JSON.stringify(cited), writtenAt: c.writtenAt, scheduledAt: now, deliveredAt: now,
-      } });
+      return await db.$transaction(async (tx) => {
+        const { snapshots, changed } = await verifiedSnapshots(tx, cited, mems);
+        return tx.letter.create({ data: {
+          sender: c.sender, subject: draft.subject, body: checked.body.trim(), triggerType: c.type, triggerKey: c.key,
+          reason: c.reason, checkStatus: changed ? "unchecked" : checked.checkStatus,
+          checkNote: changed ? "引用记忆在写信期间发生变化，相关引用已移除，请谨慎阅读" : checked.checkNote,
+          citedMemoryIds: JSON.stringify(snapshots.map((snapshot) => snapshot.memoryId)), citedSnapshot: JSON.stringify(snapshots),
+          writtenAt: c.writtenAt, scheduledAt: now, deliveredAt: now,
+        } });
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         const existing = await db.letter.findUnique({ where: { triggerKey: c.key }, select: { id: true } });

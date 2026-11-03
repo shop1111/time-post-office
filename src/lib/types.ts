@@ -170,3 +170,17 @@ export interface PostmanEvents {
 }
 export type CheckStatus = "passed" | "rewritten" | "unchecked" | "failed";
 export interface LetterCheckInfo { checkStatus: CheckStatus; checkNote: string }
+
+export type LetterSourceState = "current" | "corrected" | "withdrawn";
+export interface LetterSource {
+  memoryId: string;
+  entryId: string | null;
+  date: string;
+  excerpt: string;
+  state: LetterSourceState;
+}
+export interface LetterSentenceSources { text: string; sources: LetterSource[] }
+export interface LetterSourcesResponse extends LetterCheckInfo {
+  letterId: string;
+  sentences: LetterSentenceSources[];
+}
