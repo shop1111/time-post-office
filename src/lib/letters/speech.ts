@@ -6,6 +6,7 @@ import { UPLOAD_DIR } from "@/lib/files";
 import { speechConfig, synthesizeSpeech } from "@/lib/ai/speech";
 import type { ExecutionInfo } from "@/lib/types";
 import { logError } from "@/lib/errors";
+import { recordAiExecution } from "@/lib/ai/telemetry";
 
 interface SpeechResult { url: string; cached: boolean; execution: ExecutionInfo }
 export class SpeechRequestError extends Error {
@@ -20,7 +21,10 @@ export async function letterSpeech(letterId: string): Promise<SpeechResult> {
   const letter = await db.letter.findUnique({ where: { id: letterId }, select: { id: true, body: true } });
   if (!letter) throw new SpeechRequestError(404, "LETTER_NOT_FOUND", "找不到这封信");
   const config = speechConfig();
-  if (!config) throw new SpeechRequestError(501, "TTS_NOT_CONFIGURED", "尚未配置朗读服务，请使用浏览器朗读");
+  if (!config) {
+    recordAiExecution("tts", { mode: "mock", durationMs: Date.now() - started, fallbackReason: "not_configured" }, "tts");
+    throw new SpeechRequestError(501, "TTS_NOT_CONFIGURED", "尚未配置朗读服务，请使用浏览器朗读");
+  }
   if (!letter.body.trim()) throw new SpeechRequestError(400, "TTS_EMPTY_TEXT", "信件没有可朗读的正文");
   if (letter.body.length > MAX_SPEECH_CHARACTERS) throw new SpeechRequestError(400, "TTS_TEXT_TOO_LONG", "正文超过4000字符，请使用浏览器朗读完整信件");
   // 加入端点和格式版本，防止切换服务商后误用旧音色；绝不把Key写入文件名或元数据。

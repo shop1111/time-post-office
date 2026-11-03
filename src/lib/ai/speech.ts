@@ -1,5 +1,6 @@
-import { AiFailure, bounded, Budget, positiveEnv, requestResponse } from "./transport";
+import { AiFailure, bounded, Budget, failureOf, positiveEnv, requestResponse } from "./transport";
 import type { ExecutionInfo } from "@/lib/types";
+import { recordAiExecution } from "./telemetry";
 
 export interface SpeechConfig { baseUrl: string; apiKey: string; model: string; voice: string }
 export function speechConfig(): SpeechConfig | null {
@@ -39,6 +40,11 @@ export async function synthesizeSpeech(text: string, config: SpeechConfig): Prom
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
       body: JSON.stringify({ model: config.model, voice: config.voice, input: text, response_format: "mp3" }),
     }, budget, (response) => readMp3(response, budget.signal));
-    return { audio, execution: { mode: "remote", model: config.model, durationMs: Date.now() - started } };
+    const execution: ExecutionInfo = { mode: "remote", model: config.model, durationMs: Date.now() - started };
+    recordAiExecution("tts", execution, "tts");
+    return { audio, execution };
+  } catch (error) {
+    recordAiExecution("tts", { mode: "fallback", model: config.model, durationMs: Date.now() - started, fallbackReason: failureOf(error).reason }, "tts");
+    throw error;
   } finally { budget.dispose(); }
 }

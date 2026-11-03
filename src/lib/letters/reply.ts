@@ -28,7 +28,7 @@ export function locallyAnsweredPlans(plans: Plan[], reply: string): string[] {
 export async function judgeReply(plans: Plan[], reply: string, options: CallOptions = {}): Promise<string[]> {
   if (!plans.length) return [];
   const result = await chatJson(z.object({ answeredPlanIds: z.array(z.string()).max(20) }), replyJudgmentMessages(plans, reply), {
-    ...options, temperature: 0, maxTokens: 250,
+    ...options, purpose: options.purpose ?? "reply", temperature: 0, maxTokens: 250,
     mock: () => ({ answeredPlanIds: locallyAnsweredPlans(plans, reply) }),
   });
   // 对明确的“尚未/推迟”做保守硬保护，即使模型误报，也不关计划。

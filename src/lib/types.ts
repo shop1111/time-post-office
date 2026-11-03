@@ -184,3 +184,16 @@ export interface LetterSourcesResponse extends LetterCheckInfo {
   letterId: string;
   sentences: LetterSentenceSources[];
 }
+
+export type AiRole = "chat" | "vision" | "embed" | "asr" | "tts";
+export interface AiCapability { role: AiRole; configured: boolean; model?: string; host?: string; thinking?: "off" | "on" }
+export interface AiRecentCall extends ExecutionInfo { at: string; role: AiRole; purpose?: string }
+export interface DiagnosticsResponse {
+  now: string;
+  clockOffsetDays: number;
+  db: { ok: boolean; entries: number; memories: number; letters: number; jobs: { running: number; failed: number } };
+  capabilities: AiCapability[];
+  recent: AiRecentCall[];
+  summary: { remote: number; mock: number; fallback: number };
+}
+export interface DiagnosticsPingResponse { ok: boolean; execution: ExecutionInfo }

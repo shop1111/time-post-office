@@ -56,7 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           let full = "";
           let execution: ExecutionInfo | undefined;
           for await (const delta of chatStream(history, {
-            temperature: 0.85, maxTokens: 300, onExecution: (info) => { execution = info; },
+            temperature: 0.85, maxTokens: 300, purpose: "interview", onExecution: (info) => { execution = info; },
             mock: () => mockInterview({ type: entry.type, text: entry.text, place: entry.place, round, maxRounds: MAX_ROUNDS, lastUser, related }),
           })) {
             if (writer.closed) return;
