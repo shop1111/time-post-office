@@ -77,13 +77,13 @@ export async function tickWithinAction(opts: TickOptions = {}): Promise<TickResu
     const duplicate = existing.get(key);
     // 固定优先次序就是实际拦截顺序，每个分支同时停止执行并记录原因。
     if (duplicate) {
-      decision.outcome = "deduplicated"; decision.reason = "这个触发事件已有信件"; decision.existingLetterId = duplicate;
+      decision.outcome = "deduplicated"; decision.existingLetterId = duplicate;
     } else if (!gapOk) {
-      decision.outcome = "rate_limited"; decision.reason = "距离上一封AI来信不足20小时";
+      decision.outcome = "rate_limited";
     } else if (usedTypes.has(type)) {
-      decision.outcome = "type_limited"; decision.reason = "本轮已经选择过同类型信件";
+      decision.outcome = "type_limited";
     } else if (selected >= maxLetters) {
-      decision.outcome = "quota_limited"; decision.reason = "本轮写信名额已用完";
+      decision.outcome = "quota_limited";
     } else {
       selected++; usedTypes.add(type);
       publish(decision);
@@ -100,7 +100,7 @@ export async function tickWithinAction(opts: TickOptions = {}): Promise<TickResu
         generated.push(letter.id); existing.set(key, letter.id);
       } catch (error) {
         if (error instanceof AlreadySentError) {
-          decision.outcome = "deduplicated"; decision.reason = "入库时发现同一触发事件已有信件";
+          decision.outcome = "deduplicated";
           decision.existingLetterId = error.letterId; existing.set(key, error.letterId);
         } else {
           decision.outcome = "failed";
