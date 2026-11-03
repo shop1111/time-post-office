@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ChevronDown, Square, Volume2 } from "lucide-react";
+import { ChevronDown, Loader2, Square, Volume2 } from "lucide-react";
 import { Postmark, Stamp, SENDER_TEXT } from "./Postal";
+import { AudioPlayer } from "./audio/AudioPlayer";
+import { ExecutionBadge } from "./ExecutionBadge";
 import { TRIGGER_LABEL } from "./postman/labels";
 import { EnvelopeOpening } from "./letter/EnvelopeOpening";
 import { LetterBody } from "./letter/LetterBody";
@@ -48,7 +50,7 @@ export function LetterView({ l, cited, sentences }: { l: L; cited: Cited[]; sent
   const router = useRouter();
   const gap = daysBetween(l.writtenAt, l.deliveredAt);
   const texts = useMemo(() => sentences.map((s) => s.text), [sentences]);
-  const voice = useReadAloud(texts);
+  const voice = useReadAloud(l.id, texts);
 
   useEffect(() => {
     if (!l.readAt) fetch(`/api/letters/${l.id}`, { method: "POST", body: JSON.stringify({ action: "read" }) }).then(() => router.refresh());
@@ -81,14 +83,20 @@ export function LetterView({ l, cited, sentences }: { l: L; cited: Cited[]; sent
           </div>
         </div>
 
-        {voice.supported && (
-          <div className="mt-4 flex justify-end px-6">
-            <button onClick={voice.reading >= 0 ? voice.stop : voice.start} className="btn btn-ghost !px-3 !py-1 text-xs" aria-pressed={voice.reading >= 0}>
-              {voice.reading >= 0 ? <Square size={12} /> : <Volume2 size={14} />}
-              {voice.reading >= 0 ? "停止朗读" : "朗读这封信"}
-            </button>
-          </div>
-        )}
+        <div className="mt-4 flex flex-col items-end gap-2 px-6">
+          <button onClick={voice.mode === "idle" ? voice.start : voice.stop} className="btn btn-ghost !px-3 !py-1 text-xs" aria-pressed={voice.mode !== "idle"}>
+            {voice.mode === "loading" ? <Loader2 size={13} className="animate-spin" /> : voice.mode === "idle" ? <Volume2 size={14} /> : <Square size={12} />}
+            {voice.mode === "loading" ? "正在准备朗读…" : voice.mode === "idle" ? "朗读这封信" : "停止朗读"}
+          </button>
+          {voice.mode === "tts" && voice.tts && (
+            <div className="flex w-full flex-col items-end gap-1 sm:w-96">
+              <AudioPlayer src={voice.tts.url} autoPlay onEnded={voice.stop} label="朗读" className="w-full" />
+              <ExecutionBadge info={voice.tts.execution} showDuration={false} />
+            </div>
+          )}
+          {voice.mode === "browser" && <span className="text-[11px] text-ink-3">浏览器朗读 · 读到哪句亮哪句</span>}
+          {voice.notice && <span className="text-[11px] text-gold">{voice.notice}</span>}
+        </div>
         <LetterBody sentences={sentences} reveal={reveal} reading={voice.reading} />
       </div>
 

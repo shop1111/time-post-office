@@ -7,6 +7,7 @@ import { retrieve } from "@/lib/memory/retrieve";
 import { StoryCard } from "@/components/StoryCard";
 import { EntryActions } from "@/components/EntryActions";
 import { ScoreBreakdown } from "@/components/memory/ScoreBreakdown";
+import { AudioPlayer } from "@/components/audio/AudioPlayer";
 import { fmtCN, fmtTime, photoUrl, moodEmoji } from "@/lib/utils";
 import { KIND_LABEL, type MemoryKind } from "@/lib/types";
 
@@ -58,6 +59,15 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
         <img src={photoUrl(entry.photoPath)!} alt={entry.title ?? ""} className="max-h-[480px] w-full rounded-2xl object-cover shadow-[var(--shadow)]" />
       )}
       {entry.visionCaption && <p className="-mt-3 text-xs text-ink-3">👁 AI 看到的画面：{entry.visionCaption}</p>}
+
+      {entry.audioPath && (
+        <section aria-label="原声">
+          <div className="mb-1.5 flex items-center gap-1 text-xs text-ink-3">
+            <Mic size={12} /> 那天的原声
+          </div>
+          <AudioPlayer src={`/api/files/${encodeURIComponent(entry.audioPath)}`} label="原声" />
+        </section>
+      )}
 
       {entry.text && <p className="letter-paper rounded-2xl border border-line px-6 py-3 font-hand text-lg">{entry.text}</p>}
 
