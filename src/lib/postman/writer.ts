@@ -11,6 +11,7 @@ import { getProfile, styleText } from "@/lib/memory/profile";
 import type { ExecutionInfo, PostmanStage, PostmanStageInfo } from "@/lib/types";
 import type { LetterCandidate } from "./triggers";
 import { checkLetter } from "./check";
+import { historicalStyle, writtenDayEnd } from "./history";
 
 export class AlreadySentError extends Error {
   constructor(public readonly letterId: string) { super("Trigger already has a letter"); this.name = "AlreadySentError"; }
@@ -48,17 +49,23 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
     }
   }
 
-  const { mems, memText, profile, style, desc } = await stage("retrieve", async (onExecution) => {
-    const profile = await getProfile();
-    const { style, desc } = await styleText();
-    // 本批保留旧的时间边界；M3 统一处理画像、锚点和检索的落款日限制。
-    const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds } }, include: { entities: { include: { entity: true } } } })).sort((a, b) => c.anchorMemoryIds.indexOf(a.id) - c.anchorMemoryIds.indexOf(b.id));
-    const extra = await retrieve({ query: c.query || c.reason, now, k: 5, entities: c.entities, weights: NOSTALGIA_WEIGHTS,
-      before: c.sender === "past_self" ? new Date(c.writtenAt.getTime() + 86_400_000) : undefined, onExecution });
+  const { mems, memText, profile, style, desc, writingReason } = await stage("retrieve", async (onExecution) => {
+    const before = c.sender === "past_self" ? writtenDayEnd(c.writtenAt) : undefined;
+    const profile = before ? { name: "你", summary: "" } : await getProfile();
+    const { style, desc } = before ? await historicalStyle(before) : await styleText();
+    const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds }, ...(before ? {
+      occurredAt: { lt: before }, OR: [{ entryId: null }, { entry: { occurredAt: { lt: before } } }],
+    } : {}) }, include: { entities: { include: { entity: true } } } })).sort((a, b) => c.anchorMemoryIds.indexOf(a.id) - c.anchorMemoryIds.indexOf(b.id));
+    // 候选reason/query/entities也可能混入后来的信息，过去的你仅从合格锚点重建检索输入。
+    const query = before ? anchors.map((m) => m.content).join(" ") || "过去记录下的生活" : c.query || c.reason;
+    const entities = before ? [...new Set(anchors.flatMap((m) => m.entities.filter((e) => m.content.includes(e.entity.name)).map((e) => e.entity.name)))] : c.entities;
+    const writingReason = before ? c.type === "open_loop" ? "把当时的计划写给未来，问问后来怎么样了；那个日子应该已经到了" : "把落款这一天已经知道的生活，写给未来的自己" : c.reason;
+    const extra = await retrieve({ query, now: before ? c.writtenAt : now, k: 5, entities, weights: NOSTALGIA_WEIGHTS, before, onExecution });
     const anchorMems: RetrievedMemory[] = anchors.map((a) => ({ id: a.id, kind: a.kind, content: a.content, importance: a.importance, occurredAt: a.occurredAt, entryId: a.entryId,
       entities: a.entities.map((e) => e.entity.name), score: 99, parts: { sim: 1, recency: 0, importance: a.importance / 10, entity: 1 } }));
     const mems = [...anchorMems, ...extra.filter((e) => !c.anchorMemoryIds.includes(e.id))].slice(0, 7);
-    return { mems, memText: formatMemories(mems), profile, style, desc };
+    if (before) profile.summary = mems.map((memory) => memory.content).join("；");
+    return { mems, memText: formatMemories(mems), profile, style, desc, writingReason };
   });
 
   const draft = await stage("generate", async (onExecution) => {
@@ -67,9 +74,9 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
       error.name = "PostmanDebugFailure";
       throw error;
     }
-    return chatJson(LetterSchema, letterMessages({ sender: c.sender, reason: c.reason, today: fmtDate(now), writtenAt: fmtDate(c.writtenAt), memories: memText, style: desc, profile: profile.summary, name: profile.name }), {
+    return chatJson(LetterSchema, letterMessages({ sender: c.sender, reason: writingReason, today: fmtDate(now), writtenAt: fmtDate(c.writtenAt), memories: memText, style: desc, profile: profile.summary, name: profile.name }), {
       temperature: 0.85, maxTokens: 1400, onExecution,
-      mock: () => mockLetter({ sender: c.sender, reason: c.reason, memories: mems, style, name: profile.name, writtenAt: c.writtenAt, today: now }),
+      mock: () => mockLetter({ sender: c.sender, reason: writingReason, memories: mems, style, name: profile.name, writtenAt: c.writtenAt, today: now }),
     });
   });
 
