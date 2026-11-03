@@ -1,0 +1,50 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { Logo } from "./Nav";
+import { DemoButton } from "./DemoButton";
+
+export function Onboarding() {
+  const [name, setName] = useState("");
+  const router = useRouter();
+  async function saveName() {
+    if (name.trim()) await fetch("/api/profile", { method: "PATCH", body: JSON.stringify({ name }) });
+    router.push("/record");
+  }
+  return (
+    <div className="mx-auto flex max-w-xl flex-col items-center pt-8 text-center md:pt-16">
+      <motion.div initial={{ scale: 0.6, rotate: -10, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 160 }}>
+        <Logo size={72} />
+      </motion.div>
+      <h1 className="mt-6 font-hand text-4xl">欢迎来到时光邮局</h1>
+      <p className="mt-4 text-[15px] leading-8 text-ink-2">
+        把生活寄存在这里——一张照片、一段语音、几行日记。
+        <br />
+        邮差会好奇地问你那天发生了什么，慢慢记住你的故事，
+        <br />
+        然后在未来的某一天，替<span className="text-stamp">过去的你</span>、<span className="text-post">未来的你</span>给你写一封信。
+      </p>
+
+      <div className="card mt-8 w-full p-5 text-left">
+        <label className="text-sm text-ink-2">邮差该怎么称呼你？</label>
+        <div className="mt-2 flex gap-2">
+          <input className="input" placeholder="你的名字或昵称" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveName()} />
+          <button className="btn btn-primary" onClick={saveName}>
+            寄出第一封
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-col items-center gap-2 text-sm text-ink-3">
+        <span>想先看看用了半年会是什么样子？</span>
+        <DemoButton label="载入示例人生「林小满」" />
+        <Link href="/about" className="mt-2 underline-offset-4 hover:underline">
+          了解它是怎么工作的
+        </Link>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 一条原始生活记录：照片 / 语音 / 日记
+model Entry {
+  id            String         @id @default(cuid())
+  type          String // photo | voice | text
+  text          String         @default("")
+  transcript    String?
+  photoPath     String?
+  visionCaption String?
+  exifTime      DateTime?
+  lat           Float?
+  lng           Float?
+  place         String?
+  occurredAt    DateTime
+  mood          Float? // -1 ~ 1
+  emotions      String         @default("[]") // JSON string[]
+  title         String?
+  summary       String?
+  interviewDone Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  messages      EntryMessage[]
+  memories      Memory[]
+  cards         StoryCard[]
+
+  @@index([occurredAt])
+}
+
+/// AI 追问对话
+model EntryMessage {
+  id        String   @id @default(cuid())
+  entryId   String
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  role      String // user | assistant
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
+
+/// 结构化记忆
+model Memory {
+  id             String         @id @default(cuid())
+  entryId        String?
+  entry          Entry?         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  kind           String // event | fact | person | place | goal | plan | preference
+  content        String
+  importance     Int            @default(5) // 1-10
+  occurredAt     DateTime
+  dueAt          DateTime?
+  embedding      Bytes?
+  lastRecalledAt DateTime?
+  recallCount    Int            @default(0)
+  userEdited     Boolean        @default(false)
+  resolved       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  entities       MemoryEntity[]
+
+  @@index([occurredAt])
+  @@index([kind])
+}
+
+model Entity {
+  id        String         @id @default(cuid())
+  name      String
+  type      String // person | place | theme
+  note      String?
+  createdAt DateTime       @default(now())
+  memories  MemoryEntity[]
+
+  @@unique([name, type])
+}
+
+model MemoryEntity {
+  memoryId String
+  entityId String
+  memory   Memory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@id([memoryId, entityId])
+}
+
+/// 用户画像（单例 id = "me"）
+model Profile {
+  id          String   @id @default("me")
+  name        String   @default("你")
+  summary     String   @default("")
+  traits      String   @default("[]") // JSON string[]
+  style       String   @default("{}") // JSON StyleFingerprint
+  updatedAt   DateTime @updatedAt
+}
+
+/// 信件：AI 来信 & 用户写给未来的时间胶囊
+model Letter {
+  id             String    @id @default(cuid())
+  sender         String // past_self | future_self | postman | user
+  subject        String
+  body           String
+  triggerType    String // anniversary | open_loop | low_mood | milestone | capsule | welcome | manual
+  triggerKey     String?   @unique // 去重键
+  reason         String    @default("")
+  citedMemoryIds String    @default("[]") // JSON string[]
+  writtenAt      DateTime  @default(now()) // 落款时间（"过去的你"可早于现在）
+  scheduledAt    DateTime
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  reply          String?
+  repliedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([scheduledAt])
+}
+
+model StoryCard {
+  id        String   @id @default(cuid())
+  entryId   String
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  title     String
+  narrative String
+  quote     String   @default("")
+  template  String   @default("paper") // paper | film | night | postcard
+  createdAt DateTime @default(now())
+}
+
+model MonthlyRecap {
+  id        String   @id @default(cuid())
+  month     String   @unique // 2026-07
+  payload   String // JSON
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}

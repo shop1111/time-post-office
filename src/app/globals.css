@@ -1,0 +1,195 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f5efe3;
+  --paper-2: #ece3d0;
+  --card: #fffbf2;
+  --ink: #2f2a24;
+  --ink-2: #6b6257;
+  --ink-3: #a39886;
+  --line: #e3d7c0;
+  --stamp: #c0483a;
+  --stamp-soft: #f3d9d3;
+  --post: #2f5d62;
+  --post-soft: #d8e6e4;
+  --gold: #c9973f;
+  --night: #27324a;
+  --shadow: 0 1px 2px rgb(60 40 20 / 0.06), 0 8px 24px -12px rgb(60 40 20 / 0.18);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1b1916;
+    --paper-2: #24211d;
+    --card: #2a2622;
+    --ink: #efe6d6;
+    --ink-2: #bdb2a1;
+    --ink-3: #847a6c;
+    --line: #3a352e;
+    --stamp: #e06a58;
+    --stamp-soft: #4a2a25;
+    --post: #7fb3b5;
+    --post-soft: #233536;
+    --gold: #e0b25f;
+    --night: #1a2236;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-stamp: var(--stamp);
+  --color-stamp-soft: var(--stamp-soft);
+  --color-post: var(--post);
+  --color-post-soft: var(--post-soft);
+  --color-gold: var(--gold);
+  --font-sans: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", serif;
+  --font-hand: "Kaiti SC", "STKaiti", "KaiTi", "楷体", "Songti SC", serif;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(circle at 20% 0%, rgb(255 255 255 / 0.35), transparent 40%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.3 0 0 0 0 0.2 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-attachment: fixed;
+}
+
+.font-hand {
+  font-family: var(--font-hand);
+}
+.font-serif-cn {
+  font-family: var(--font-serif);
+}
+
+/* 卡片 */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+/* 信纸横线 */
+.letter-paper {
+  background-color: var(--card);
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 35px, var(--line) 35px, var(--line) 36px);
+  background-position: 0 14px;
+  background-attachment: local;
+  line-height: 36px !important;
+}
+.letter-paper * {
+  line-height: 36px;
+}
+
+/* 航空信封边 */
+.airmail {
+  background: repeating-linear-gradient(135deg, var(--stamp) 0 14px, var(--card) 14px 24px, var(--post) 24px 38px, var(--card) 38px 48px);
+}
+
+/* 邮票齿孔 */
+.stamp-edge {
+  background: radial-gradient(circle at center, transparent 2.6px, #fffdf8 3px) -4.5px -4.5px / 9px 9px;
+  padding: 5px !important;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.12));
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: transform 0.15s, background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.btn-primary {
+  background: var(--stamp);
+  color: #fff;
+}
+.btn-primary:hover {
+  filter: brightness(1.06);
+}
+.btn-ghost {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+.btn-ghost:hover {
+  background: var(--paper-2);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  outline: none;
+  color: var(--ink);
+}
+.input:focus {
+  border-color: var(--stamp);
+  box-shadow: 0 0 0 3px var(--stamp-soft);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+.caret::after {
+  content: "▍";
+  margin-left: 2px;
+  animation: blink 1s steps(2) infinite;
+  color: var(--stamp);
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@media print {
+  nav,
+  header {
+    display: none !important;
+  }
+}
