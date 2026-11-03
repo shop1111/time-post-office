@@ -245,6 +245,21 @@ describe("finalize with isolated SQLite", () => {
     expect((await retry.run.done).status).toBe("completed");
     expect(generateStoryCard).toHaveBeenCalledTimes(2);
   });
+  it("新记忆只清掉所在月份的回忆缓存", async () => {
+    const entry = await create();
+    await db.monthlyRecap.createMany({ data: [{ month: "2026-11", payload: "{}" }, { month: "2026-10", payload: "{}" }] });
+    await jsonPost(entry.id);
+    expect((await db.monthlyRecap.findMany()).map((r) => r.month)).toEqual(["2026-10"]);
+  });
+  it("撤回后，已完成任务的结果和恢复页都不再列出这条记忆", async () => {
+    const entry = await create();
+    const first = await jsonPost(entry.id);
+    expect(first.memories.length).toBeGreaterThan(1);
+    const [gone, ...kept] = first.memories;
+    await db.memory.update({ where: { id: gone.id }, data: { status: "retracted" } });
+    expect((await jsonPost(entry.id)).memories.map((m) => m.id)).toEqual(kept.map((m) => m.id));
+    expect((await get(entry.id)).result?.memories.map((m) => m.id)).toEqual(kept.map((m) => m.id));
+  });
   it("缺失记录/任务返回约定404错误体", async () => {
     expect((await POST(request(), context("missing"))).status).toBe(404);
     const entry = await create();

@@ -2,6 +2,9 @@ import type { Prisma } from "@prisma/client";
 
 export type MemoryStatus = "active" | "retracted";
 
+/** 只有有效记忆才能被检索、写进信、计入统计；已撤回的仅在记忆管理页供核对。 */
+export const ACTIVE_MEMORY = { status: "active" } as const;
+
 export type InvalidationReason =
   | "memory_created"
   | "memory_corrected"
@@ -21,6 +24,27 @@ export interface InvalidateDerivedResult {
 /** Shared by invalidation and the subsequent profile/recap integration. */
 export const DERIVED_REVISION_KEY = "memory.derivedRevision";
 export const PROFILE_REVISION_KEY = "memory.profileBuiltRevision";
+
+export class DerivedDataConflictError extends Error {
+  constructor() {
+    super("记忆已发生变化，本次生成结果未保存，请重新生成。");
+    this.name = "DerivedDataConflictError";
+  }
+}
+
+export async function getDerivedRevision(tx: Pick<Prisma.TransactionClient, "setting">): Promise<number> {
+  const row = await tx.setting.findUnique({ where: { key: DERIVED_REVISION_KEY } });
+  if (!row) return 0;
+  const value = Number(row.value);
+  if (!/^(0|[1-9]\d*)$/.test(row.value) || !Number.isSafeInteger(value)) {
+    throw new Error("Invalid memory derived revision");
+  }
+  return value;
+}
+
+export async function assertDerivedRevision(tx: Prisma.TransactionClient, expected: number) {
+  if (await getDerivedRevision(tx) !== expected) throw new DerivedDataConflictError();
+}
 
 const REASONS: readonly InvalidationReason[] = [
   "memory_created", "memory_corrected", "memory_retracted", "entry_deleted",

@@ -3,6 +3,7 @@
  */
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { chat, isMock } from "@/lib/ai/provider";
 import { chatJson } from "@/lib/ai/json";
 import { letterMessages, rewriteMessages, selfCheckMessages } from "@/lib/ai/prompts";
@@ -18,9 +19,9 @@ const MIN_GAP_HOURS = 20; // 频控：AI 来信至少间隔 20 小时（虚拟�
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
   const [entries, memories, letters, entities] = await Promise.all([
     db.entry.findMany({ select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
-    db.memory.findMany({ include: { entities: { include: { entity: true } } } }),
+    db.memory.findMany({ where: ACTIVE_MEMORY, include: { entities: { include: { entity: true } } } }),
     db.letter.findMany({ where: { triggerKey: { not: null } }, select: { triggerKey: true } }),
-    db.entity.findMany({ include: { _count: { select: { memories: true } } } }),
+    db.entity.findMany({ include: { _count: { select: { memories: { where: { memory: ACTIVE_MEMORY } } } } } }),
   ]);
   return {
     now,
@@ -94,7 +95,7 @@ export async function writeLetter(c: LetterCandidate, now: Date) {
   const { style, desc } = await styleText();
 
   // 锚点记忆 + 语义检索补充；「过去的你」只能看到写信那天之前的记忆
-  const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds } }, include: { entities: { include: { entity: true } } } })).sort(
+  const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds }, ...ACTIVE_MEMORY }, include: { entities: { include: { entity: true } } } })).sort(
     (a, b) => c.anchorMemoryIds.indexOf(a.id) - c.anchorMemoryIds.indexOf(b.id),
   );
   const extra = await retrieve({

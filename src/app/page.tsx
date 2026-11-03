@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Camera, Mic, PenLine, ArrowRight, Sparkles } from "lucide-react";
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now } from "@/lib/clock";
 import { getProfile } from "@/lib/memory/profile";
 import { Envelope } from "@/components/Envelope";
@@ -21,7 +22,7 @@ export default async function Home() {
   const [profile, entryCount, memoryCount, letters, transit, cards, all] = await Promise.all([
     getProfile(),
     db.entry.count(),
-    db.memory.count(),
+    db.memory.count({ where: ACTIVE_MEMORY }),
     db.letter.findMany({ where: { deliveredAt: { not: null }, readAt: null }, orderBy: { deliveredAt: "desc" }, take: 6 }),
     db.letter.count({ where: { deliveredAt: null } }),
     db.storyCard.findMany({ orderBy: { entry: { occurredAt: "desc" } }, take: 4, include: { entry: true } }),

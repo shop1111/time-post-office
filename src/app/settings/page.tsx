@@ -5,11 +5,12 @@ import { getProfile } from "@/lib/memory/profile";
 import { DemoButton } from "@/components/DemoButton";
 import { NameForm } from "@/components/NameForm";
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 
 export default async function Settings() {
   const st = providerStatus();
   const profile = await getProfile();
-  const [entries, memories, letters] = await Promise.all([db.entry.count(), db.memory.count(), db.letter.count()]);
+  const [entries, memories, letters] = await Promise.all([db.entry.count(), db.memory.count({ where: ACTIVE_MEMORY }), db.letter.count()]);
   const rows: Array<[string, string | null, string]> = [
     ["对话 / 写信", st.chat, "CHAT_*"],
     ["看图", st.vision, "VISION_*"],
