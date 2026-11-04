@@ -57,7 +57,7 @@ export default async function Home() {
       {/* 快捷记录 */}
       <section className="grid grid-cols-3 gap-3">
         {[
-          { href: "/record?type=photo", icon: Camera, label: "寄一张照片", sub: "AI 会问你那天的故事" },
+          { href: "/record?type=photo", icon: Camera, label: "寄一张照片", sub: "小局会问你那天的故事" },
           { href: "/record?type=voice", icon: Mic, label: "说一段话", sub: "边说边转文字" },
           { href: "/record?type=text", icon: PenLine, label: "写一篇日记", sub: "长短都好" },
         ].map(({ href, icon: Icon, label, sub }) => (
@@ -124,12 +124,12 @@ export default async function Home() {
         </section>
       )}
 
-      {/* AI 眼中的你 */}
+      {/* 小局眼中的你 */}
       <section className="card flex flex-col gap-3 p-5 md:flex-row md:items-center">
         <Sparkles className="shrink-0 text-gold" />
         <div className="flex-1">
           <div className="text-xs text-ink-3">
-            邮差已经记住了 {memoryCount} 件关于你的事 · {entryCount} 段生活
+            小局已经记住了 {memoryCount} 件关于你的事 · {entryCount} 段生活
           </div>
           <p className="mt-1 text-[15px] leading-7">{profile.summary || "还在慢慢认识你。多寄几封生活的信吧。"}</p>
         </div>

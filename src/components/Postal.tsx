@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 const SENDER_STAMP: Record<string, { bg: string; icon: string; label: string }> = {
   past_self: { bg: "#c98a6b", icon: "🕰️", label: "过去" },
   future_self: { bg: "#5b7fa8", icon: "🌙", label: "未来" },
-  postman: { bg: "#2f5d62", icon: "📮", label: "邮差" },
+  postman: { bg: "#2f5d62", icon: "📮", label: "小局" },
   user: { bg: "#c0483a", icon: "💌", label: "胶囊" },
 };
 
@@ -48,6 +48,6 @@ export function Postmark({ date, label = "时光邮局", className }: { date: Da
 export const SENDER_TEXT: Record<string, string> = {
   past_self: "来自过去的你",
   future_self: "来自未来的你",
-  postman: "来自时光邮差",
+  postman: "来自小局",
   user: "来自从前的你（时间胶囊）",
 };

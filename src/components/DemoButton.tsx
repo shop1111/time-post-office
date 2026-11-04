@@ -24,7 +24,7 @@ export function DemoButton({ label = "载入示例人生", action = "load", clas
   }
   return (
     <button className={className} onClick={run} disabled={busy}>
-      {busy ? "邮差正在搬运档案…" : label}
+      {busy ? "小局正在搬运档案…" : label}
     </button>
   );
 }

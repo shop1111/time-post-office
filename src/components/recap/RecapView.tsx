@@ -56,7 +56,7 @@ export function RecapView({ month, initial }: { month: string; initial: RecapPay
         <motion.div animate={{ rotateY: [0, 180, 360] }} transition={{ repeat: Infinity, duration: 2 }} className="text-5xl">
           📖
         </motion.div>
-        <p className="font-hand text-lg">邮差正在翻阅这个月的信件…</p>
+        <p className="font-hand text-lg">小局正在翻阅这个月的信件…</p>
         <p className="text-xs text-ink-3">统计情绪曲线 · 找出高光时刻 · 写一段月度叙事</p>
       </div>
     );

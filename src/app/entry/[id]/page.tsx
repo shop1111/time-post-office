@@ -58,13 +58,13 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photoUrl(entry.photoPath)!} alt={entry.title ?? ""} className="max-h-[480px] w-full rounded-2xl object-cover shadow-[var(--shadow)]" />
       )}
-      {entry.visionCaption && <p className="-mt-3 text-xs text-ink-3">👁 AI 看到的画面：{entry.visionCaption}</p>}
+      {entry.visionCaption && <p className="-mt-3 text-xs text-ink-3">👁 小局看到的画面：{entry.visionCaption}</p>}
 
       {entry.text && <p className="letter-paper rounded-2xl border border-line px-6 py-3 font-hand text-lg">{entry.text}</p>}
 
       {entry.messages.length > 0 && (
         <section className="card p-5">
-          <h2 className="font-hand text-lg">和邮差的对话</h2>
+          <h2 className="font-hand text-lg">和小局的对话</h2>
           <div className="mt-3 space-y-2.5">
             {entry.messages.map((m) => (
               <div key={m.id} className={m.role === "user" ? "text-right" : ""}>
@@ -84,7 +84,7 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
 
       {entry.memories.length > 0 && (
         <section className="card p-5">
-          <h2 className="font-hand text-lg">邮差从这天记住的事</h2>
+          <h2 className="font-hand text-lg">小局从这天记住的事</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {entry.memories.map((m) => (
               <li key={m.id} className="flex gap-2">
@@ -105,7 +105,7 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
 
       {related.length > 0 && (
         <section>
-          <h2 className="mb-3 font-hand text-xl">这让邮差想起</h2>
+          <h2 className="mb-3 font-hand text-xl">这让小局想起</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {related.map((r) => (
               <Link key={r.id} href={r.entryId ? `/entry/${r.entryId}` : "/memory"} className="card block p-4 transition hover:-translate-y-0.5">

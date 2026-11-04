@@ -16,7 +16,7 @@ export function PostmanPing() {
       .then((r: { generated: string[]; delivered: string[] }) => {
         const n = (r.generated?.length ?? 0) + (r.delivered?.length ?? 0);
         if (n > 0) {
-          toast(`邮差刚刚送来了 ${n} 封信`, "📮");
+          toast(`小局刚刚送来了 ${n} 封信`, "📮");
           router.refresh();
         }
       })

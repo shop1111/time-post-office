@@ -269,13 +269,13 @@ export const DEMO_LETTERS: DemoLetter[] = [
   {
     key: "welcome", sender: "postman", triggerType: "welcome", subject: "欢迎来到时光邮局", writtenDaysAgo: 178, deliverDaysAgo: 178, read: true,
     reason: "你寄出了第一封生活的信",
-    body: "小满，你好：\n\n我是这里的时光邮差。从今天起，你寄来的每一张照片、每一段话、每一篇日记，我都会好好保管。\n\n我不会催你每天都写。想起来的时候，随手寄一封就好。等过一阵子，我会时不时给你回信——有时候是我，有时候，是过去或未来的你自己。\n\n新的城市，慢慢来。\n\n—— 替你保管时光的邮差",
+    body: "小满，你好：\n\n我是小局，这里的邮差。从今天起，你寄来的每一张照片、每一段话、每一篇日记，我都会好好保管。\n\n我不会催你每天都写。想起来的时候，随手寄一封就好。等过一阵子，我会时不时给你回信——有时候是我，有时候，是过去或未来的你自己。\n\n新的城市，慢慢来。\n\n—— 小局",
     citeKeys: ["move"],
   },
   {
     key: "anniv:bike:30", sender: "postman", triggerType: "anniversary", subject: "还记得西湖边的风吗", writtenDaysAgo: 140, deliverDaysAgo: 140, read: true,
     reason: "一个月前的今天，你记录了「西湖·和小鹿骑车」",
-    body: "小满，见字如面：\n\n一个月前的今天，你和小鹿从断桥骑到了苏堤。你说「原来周末可以这么慢」，还说来杭州以后虽然累，但是自由。\n\n这一个月你过得怎么样？还有在周末慢下来吗？\n\n—— 替你保管时光的邮差",
+    body: "小满，见字如面：\n\n一个月前的今天，你和小鹿从断桥骑到了苏堤。你说「原来周末可以这么慢」，还说来杭州以后虽然累，但是自由。\n\n这一个月你过得怎么样？还有在周末慢下来吗？\n\n—— 小局",
     reply: "最近有点忙，但是这周末打算再去骑一次！谢谢你还记得。", citeKeys: ["bike"],
   },
   {
@@ -287,13 +287,13 @@ export const DEMO_LETTERS: DemoLetter[] = [
   {
     key: "count:10", sender: "postman", triggerType: "milestone", subject: "第十封信", writtenDaysAgo: 103, deliverDaysAgo: 103, read: true,
     reason: "你已经在时光邮局寄存了 10 段生活",
-    body: "小满：\n\n你已经寄来十封生活的信了。我翻了翻：有搬家那天的夕阳，有西湖边的风，有妈妈生日时红了的眼睛，还有第一卷只有 5 张能看的胶卷。\n\n十封信，拼起来就是你在杭州的第一个季节。继续寄吧，我都在。\n\n—— 替你保管时光的邮差",
+    body: "小满：\n\n你已经寄来十封生活的信了。我翻了翻：有搬家那天的夕阳，有西湖边的风，有妈妈生日时红了的眼睛，还有第一卷只有 5 张能看的胶卷。\n\n十封信，拼起来就是你在杭州的第一个季节。继续寄吧，我都在。\n\n—— 小局",
     citeKeys: ["move", "bike", "mombday", "firstroll"],
   },
   {
     key: "anniv:erhai:30", sender: "postman", triggerType: "anniversary", subject: "还记得洱海的日出吗", writtenDaysAgo: 56, deliverDaysAgo: 56, read: true,
     reason: "一个月前的今天，你记录了「洱海·粉色的日出」",
-    body: "小满，见字如面：\n\n一个月前的清晨五点四十，你在洱海边看到了你见过最好看的日出。阿哲把外套披在你身上，自己冻得一直跺脚。你在心里说：要是能一直这样就好了。\n\n回到杭州一个月了，那天的粉色还留在你心里吗？\n\n—— 替你保管时光的邮差",
+    body: "小满，见字如面：\n\n一个月前的清晨五点四十，你在洱海边看到了你见过最好看的日出。阿哲把外套披在你身上，自己冻得一直跺脚。你在心里说：要是能一直这样就好了。\n\n回到杭州一个月了，那天的粉色还留在你心里吗？\n\n—— 小局",
     reply: "留着呢。我打算把那天的照片洗出来做成相册，给阿哲当生日礼物！", citeKeys: ["erhai"],
   },
   {
