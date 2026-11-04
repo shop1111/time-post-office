@@ -45,7 +45,7 @@ export function extractMessages(input: {
   return [
     {
       role: "system",
-      content: `你是记忆整理员。把用户的一条生活记录（含与 AI 的追问对话）整理成结构化记忆，只输出 JSON：
+      content: `你是记忆整理员。把用户的一条生活记录（含与小局的追问对话）整理成结构化记忆，只输出 JSON：
 {
   "title": "≤12字的标题",
   "summary": "≤80字的第三人称摘要",
@@ -255,7 +255,7 @@ export function profileMessages(memories: string, prev: string): ChatMessage[] {
   return [
     {
       role: "system",
-      content: `根据用户的生活记忆，更新「AI 眼中的你」画像。只输出 JSON：{"summary": "80-140字，第二人称，温暖具体，提到重要的人和在意的事", "traits": ["4-6个短标签，如 爱旅行、怕孤单、在学摄影"]}
+      content: `根据用户的生活记忆，更新「小局眼中的你」画像。只输出 JSON：{"summary": "80-140字，第二人称，温暖具体，提到重要的人和在意的事", "traits": ["4-6个短标签，如 爱旅行、怕孤单、在学摄影"]}
 旧画像：${prev || "无"}`,
     },
     { role: "user", content: memories },

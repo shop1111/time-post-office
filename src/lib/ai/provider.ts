@@ -2,10 +2,10 @@
 import { embedLite } from "@/lib/memory/embed-lite";
 import type { ExecutionInfo } from "@/lib/types";
 import { acquire, AiFailure, assertOk, backoff, bounded, Budget, failureOf, positiveEnv, requestJson } from "./transport";
+import { getLocalModel, type Role, type RoleConfig } from "./local-settings";
 
-export type Role = "chat" | "vision" | "embed" | "asr";
+export type { Role } from "./local-settings";
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
-interface RoleConfig { baseUrl: string; apiKey: string; model: string }
 export interface CallOptions {
   onExecution?: (execution: ExecutionInfo) => void;
   /** 可缩短配置预算；JSON修复共享剩余预算。 */
@@ -17,15 +17,20 @@ export interface ChatOptions extends CallOptions {
   allowTruncated?: boolean;
 }
 export function roleConfig(role: Role): RoleConfig | null {
+  const override = getLocalModel(role);
+  if (override) return override;
   const p = role.toUpperCase();
   const apiKey = process.env[`${p}_API_KEY`]?.trim();
   const baseUrl = process.env[`${p}_BASE_URL`]?.trim() || (role === "chat" ? "https://api.deepseek.com" : "");
   const model = process.env[`${p}_MODEL`]?.trim() || (role === "chat" ? "deepseek-flash" : "");
   return baseUrl && apiKey && model ? { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model } : null;
 }
+function embeddingConfig() {
+  return getLocalModel("embed") ?? (process.env.EMBED_MODE === "api" ? roleConfig("embed") : null);
+}
 export const isMock = () => roleConfig("chat") === null;
 export function providerStatus() {
-  const embedCfg = process.env.EMBED_MODE === "api" ? roleConfig("embed") : null;
+  const embedCfg = embeddingConfig();
   return {
     mock: isMock(), chat: roleConfig("chat")?.model ?? null, vision: roleConfig("vision")?.model ?? null,
     embed: embedCfg?.model ?? "lite（本地 n-gram 哈希向量）", asr: roleConfig("asr")?.model ?? "浏览器 Web Speech API",
@@ -205,7 +210,7 @@ export async function describeImage(dataUrl: string, hint: string, opts: CallOpt
   }), budget, content), () => null);
 }
 export async function embed(texts: string[], opts: CallOptions = {}): Promise<Float32Array[]> {
-  const cfg = process.env.EMBED_MODE === "api" && texts.length ? roleConfig("embed") : null;
+  const cfg = texts.length ? embeddingConfig() : null;
   return run("embed", cfg, opts, (c, budget) => requestJson(`${c.baseUrl}/embeddings`, jsonInit(c, { model: c.model, input: texts }), budget, (data) => {
     const rows = (data as { data?: Array<{ index: number; embedding: number[] }> })?.data;
     if (!Array.isArray(rows) || rows.length !== texts.length) throw new AiFailure("bad_json");

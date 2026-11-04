@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { Download } from "lucide-react";
 import { providerStatus } from "@/lib/ai/provider";
+import { canConfigureModels, getLocalModel, MODEL_ROLES } from "@/lib/ai/local-settings";
 import { getProfile } from "@/lib/memory/profile";
 import { DemoButton } from "@/components/DemoButton";
 import { NameForm } from "@/components/NameForm";
+import { LocalModelSettings } from "@/components/LocalModelSettings";
 import { DemoTools } from "@/components/DemoTools";
 import { instantReplies } from "@/lib/correspondents";
 import { CAPSULE_WHERE } from "@/lib/capsules";
@@ -12,6 +15,11 @@ import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 
 export default async function Settings() {
   const st = providerStatus();
+  const localModels = canConfigureModels((await headers()).get("host"));
+  const overrides = localModels ? Object.fromEntries(MODEL_ROLES.map((role) => {
+    const config = getLocalModel(role);
+    return [role, config && { baseUrl: config.baseUrl, model: config.model }];
+  })) : {};
   const profile = await getProfile();
   const [entries, memories, letters, instant] = await Promise.all([db.entry.count({ where: CAPSULE_WHERE }), db.memory.count({ where: ACTIVE_MEMORY }), db.letter.count(), instantReplies()]);
   const rows: Array<[string, string | null, string]> = [
@@ -33,10 +41,11 @@ export default async function Settings() {
       <section className="card p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-hand text-xl">AI 模型</h2>
-          {st.mock ? <span className="chip !bg-gold/20 !text-ink">演示模式（Mock）</span> : <span className="chip !bg-post-soft !text-post">已连接</span>}
+          {st.mock ? <span className="chip !bg-gold/20 !text-ink">演示模式（Mock）</span> : <span className="chip !bg-post-soft !text-post">已配置对话模型</span>}
         </div>
         <p className="mt-2 text-xs leading-6 text-ink-3">
-          每个能力单独配置，全部走 OpenAI 兼容协议，在项目根目录的 <code>.env</code> 中修改后重启生效。未配置对话模型时自动进入演示模式：由本地规则抽取器、模板化写信器（含代笔回信）和文风指纹驱动，所有流程都可离线跑通。
+          {localModels ? "各项能力独立配置，支持 OpenAI 兼容接口。" : <>各项能力独立配置，支持 OpenAI 兼容接口。在项目根目录的 <code>.env</code> 中修改后重启生效。</>}
+          未配置对话模型时使用演示模式：由本地规则抽取器、模板化写信器（含代笔回信）和文风指纹驱动，所有流程都可离线跑通。
         </p>
         <table className="mt-3 w-full text-sm">
           <tbody>
@@ -49,6 +58,7 @@ export default async function Settings() {
             ))}
           </tbody>
         </table>
+        {localModels && <LocalModelSettings overrides={overrides} />}
       </section>
 
       <section className="card p-5">

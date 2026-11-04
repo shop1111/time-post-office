@@ -58,7 +58,7 @@ export default async function CapsulePage({ params }: { params: Promise<{ id: st
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photoUrl(entry.photoPath)!} alt={entry.title ?? ""} className="max-h-[480px] w-full rounded-2xl object-cover shadow-[var(--shadow)]" />
       )}
-      {entry.visionCaption && <p className="-mt-3 text-xs text-ink-3">👁 AI 看到的画面：{entry.visionCaption}</p>}
+      {entry.visionCaption && <p className="-mt-3 text-xs text-ink-3">👁 小局看到的画面：{entry.visionCaption}</p>}
 
       {entry.text && <p className="letter-paper rounded-2xl border border-line px-6 py-3 font-hand text-lg">{entry.text}</p>}
 

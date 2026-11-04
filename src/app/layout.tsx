@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { now } from "@/lib/clock";
 
 export const metadata: Metadata = {
-  title: "时光邮局 · 会记住你生活的 AI 伙伴",
+  title: "时光邮局 · 小局陪你记住生活",
   description: "把生活放进胶囊，给想念的人、未来的自己、平行时空的自己写信。邮局主理人小局会记住你的故事，时不时给你来信。",
 };
 
