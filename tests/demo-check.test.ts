@@ -8,7 +8,10 @@ const stream = (frames: string) => new Response(frames, { headers: { "Content-Ty
 it("未带--yes只打印说明，既不发请求也不清数据", async () => {
   const fetcher = vi.fn(), log = vi.fn(); expect(await main([], { fetcher, log })).toBe(0); expect(fetcher).not.toHaveBeenCalled();
   expect(log.mock.calls.join(" ")).toContain("清空目标服务器数据");
+  expect(log.mock.calls.join(" ")).toContain("--real-all");
+  expect(log.mock.calls.join(" ")).toContain("本地lite向量");
   expect(parseArgs(["--yes", "--runs", "3", "--base-url", "http://localhost:3001", "--real"])).toMatchObject({ runs: 3, real: true, yes: true, baseUrl: "http://localhost:3001" });
+  expect(parseArgs(["--real-all", "--real"])).toMatchObject({ real: true, realAll: true });
 });
 it("参数错误只报固定code，不回显URL凭据", async () => {
   const log = vi.fn(), fetcher = vi.fn();
@@ -29,22 +32,24 @@ it("SSE错误只抛code，不包含服务端正文；done后的错误不能被�
   await expect(readSSE(stream(frame("done", {}) + frame("error", { code: "FAILED" })), "/api/test")).rejects.toMatchObject({ code: "SSE_AFTER_DONE" });
 });
 
-function server(mode: "remote" | "mock" | "fallback" = "mock", broken: "none" | "interview" | "persist" = "none") {
+function server(mode: "remote" | "mock" | "fallback" = "mock", broken: "none" | "interview" | "persist" = "none", embedding: "lite" | "remote" | "fallback" | "unconfigured" = "lite") {
   let calls: Array<Record<string, unknown>> = [], counter = 0, resolved = false, offset = 0, loads = 0, resets = 0;
   const info = { mode, model: "test", durationMs: 1, ...(mode === "fallback" ? { fallbackReason: "http_5xx" } : {}) };
-  const record = () => { calls.unshift({ at: new Date(1700000000000 + counter++).toISOString(), role: "chat", ...info }); calls = calls.slice(0, 30); };
-  const result = (id: string) => ({ entry: { id, interviewDone: true }, card: { id: "card" }, memories: [{ id: "memory" }], executions: Object.fromEntries(["extract", "embed", "profile", "story"].map(stage => [stage, info])) });
+  const embedInfo = embedding === "lite" || embedding === "unconfigured" ? { mode: "mock", model: "lite", durationMs: 1, fallbackReason: "not_configured" } : { mode: embedding, model: "test-embed", durationMs: 1, ...(embedding === "fallback" ? { fallbackReason: "http_5xx" } : {}) };
+  const record = (role = "chat") => { calls.unshift({ at: new Date(1700000000000 + counter++).toISOString(), role, ...(role === "embed" ? embedInfo : info) }); calls = calls.slice(0, 30); };
+  const result = (id: string) => ({ entry: { id, interviewDone: true }, card: { id: "card" }, memories: [{ id: "memory" }], executions: Object.fromEntries(["extract", "embed", "profile", "story"].map(stage => [stage, stage === "embed" ? embedInfo : info])) });
   const fetcher = vi.fn(async (url: string, init: RequestInit) => {
     const path = new URL(url).pathname;
-    if (path === "/api/diagnostics") return Response.json({ db: { ok: true }, recent: calls, clockOffsetDays: offset });
-    if (path === "/api/demo") { loads++; resolved = false; offset = 0; record(); return Response.json({ ok: true, entries: 1, letters: 1 }); }
+    if (path === "/api/diagnostics") return Response.json({ db: { ok: true }, recent: calls, clockOffsetDays: offset, capabilities: [{ role: "embed", configured: embedding === "remote" || embedding === "fallback", ...(embedding !== "unconfigured" ? { model: embedding === "lite" ? "lite" : "test-embed" } : {}) }] });
+    if (path === "/api/demo") { loads++; resolved = false; offset = 0; record("embed"); return Response.json({ ok: true, entries: 1, letters: 1 }); }
     if (path === "/api/export") return Response.json({ entries: [{ id: "entry", occurredAt: "2026-08-09T12:00:00Z" }], memories: [{ id: "exam", kind: "plan", content: "认证考试", dueAt: "2026-11-07T12:00:00Z", resolved }], letters: [{ id: "letter", body: "信件正文。" }] });
     if (path === "/api/postman") {
       const input = JSON.parse(String(init.body));
       if (input.action === "reset") { resets++; offset = 0; return Response.json({ ok: true }); }
       if (input.action === "tick") return Response.json({ decisions: [] });
-      offset = 7; record();
-      return stream(frame("done", { result: { generated: ["letter", "anniversary"], decisions: [{ key: "loop:exam", type: "open_loop", outcome: "generated", letterId: "letter", stages: [{ execution: info }] }, { key: "anniversary", type: "anniversary", outcome: "generated", letterId: "anniversary", stages: [{ execution: info }] }] } }));
+      offset = 7; record("embed"); record();
+      const stages = [{ name: "retrieve", execution: embedInfo }, { name: "generate", execution: info }, { name: "check", execution: info }];
+      return stream(frame("done", { result: { generated: ["letter", "anniversary"], decisions: [{ key: "loop:exam", type: "open_loop", outcome: "generated", letterId: "letter", stages }, { key: "anniversary", type: "anniversary", outcome: "generated", letterId: "anniversary", stages }] } }));
     }
     if (path === "/api/letters/letter/sources") return Response.json({ letterId: "letter", sentences: [{ text: "信件正文。", sources: [] }] });
     if (path === "/api/letters/letter") { record(); resolved = true; return Response.json({ resolvedPlanIds: ["exam"], replyEntryId: "reply", jobId: "job", execution: info }); }
@@ -62,11 +67,24 @@ it("完整两轮只走HTTP，每轮重载与复位且不打印正文", async () 
   expect(fake.counts()).toMatchObject({ loads: 2, resets: 2, resolved: true, offset: 0 });
   const output = log.mock.calls.join("\n"); expect(output).toContain("runs=2/2 steps=20/20 result=PASS"); expect(output).not.toContain("private");
 });
-it.each(["mock", "fallback"] as const)("--real遇到%s失败且尝试复位", async mode => {
+it.each(["mock", "fallback"] as const)("--real允许lite载入，遇到首个聊天类%s失败且尝试复位", async mode => {
   const fake = server(mode), log = vi.fn(); expect(await main(["--yes", "--real"], { fetcher: fake.fetcher, log })).toBe(1);
   expect(log.mock.calls.join("\n")).toContain("REAL_MODE_REQUIRED"); expect(fake.counts()).toMatchObject({ loads: 1, resets: 1, offset: 0 });
+  expect(log.mock.calls.join("\n")).toContain("[PASS] 载入示例人生");
+  expect(log.mock.calls.join("\n")).toContain("[FAIL] 快进7天（SSE）");
 });
-it("--real所有AI均为remote才通过", async () => { const fake = server("remote"); expect(await main(["--yes", "--real"], { fetcher: fake.fetcher, log: vi.fn() })).toBe(0); });
+it("--real聊天remote配合lite向量通过，包括finalize和邮差阶段execution", async () => { const fake = server("remote"); expect(await main(["--yes", "--real"], { fetcher: fake.fetcher, log: vi.fn() })).toBe(0); });
+it.each(["--real", "--real-all"])("%s全部remote通过", async flag => { const fake = server("remote", "none", "remote"); expect(await main(["--yes", flag], { fetcher: fake.fetcher, log: vi.fn() })).toBe(0); });
+it.each(["lite", "fallback", "unconfigured"] as const)("--real-all拒绝%s向量", async embedding => {
+  const fake = server("remote", "none", embedding), log = vi.fn();
+  expect(await main(["--yes", "--real-all"], { fetcher: fake.fetcher, log })).toBe(1);
+  expect(log.mock.calls.join("\n")).toContain("[FAIL] 载入示例人生"); expect(fake.counts().resets).toBe(1);
+});
+it.each(["fallback", "unconfigured"] as const)("--real也拒绝API向量%s", async embedding => {
+  const fake = server("remote", "none", embedding), log = vi.fn();
+  expect(await main(["--yes", "--real"], { fetcher: fake.fetcher, log })).toBe(1);
+  expect(log.mock.calls.join("\n")).toContain("[FAIL] 载入示例人生");
+});
 it.each([["interview", "SSE_MISSING_DONE"], ["persist", "MISSING_STAGE_PERSIST"]] as const)("%s不完整不能假通过，仍复位时钟", async (broken, code) => {
   const fake = server("mock", broken), log = vi.fn(); expect(await main(["--yes"], { fetcher: fake.fetcher, log })).toBe(1);
   expect(log.mock.calls.join("\n")).toContain(code); expect(fake.counts().offset).toBe(0); expect(fake.counts().resets).toBe(1);
