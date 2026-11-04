@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "demo:check": "node scripts/demo-check.mjs",
     "db:push": "prisma db push",
     "seed": "tsx prisma/seed/index.ts"
   },

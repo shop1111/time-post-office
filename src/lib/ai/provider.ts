@@ -2,12 +2,14 @@
 import { embedLite } from "@/lib/memory/embed-lite";
 import type { ExecutionInfo } from "@/lib/types";
 import { acquire, AiFailure, assertOk, backoff, bounded, Budget, failureOf, positiveEnv, requestJson } from "./transport";
+import { recordAiExecution } from "./telemetry";
 
 export type Role = "chat" | "vision" | "embed" | "asr";
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 interface RoleConfig { baseUrl: string; apiKey: string; model: string }
 export interface CallOptions {
   onExecution?: (execution: ExecutionInfo) => void;
+  purpose?: string;
   /** 可缩短配置预算；JSON修复共享剩余预算。 */
   timeoutMs?: number;
 }
@@ -73,6 +75,7 @@ async function run<T>(role: Role, cfg: RoleConfig | null, options: CallOptions, 
     } finally { budget.dispose(); }
   }
   // 回调异常不能被误当作模型错误或造成二次回调。
+  recordAiExecution(role, info, options.purpose);
   options.onExecution?.(info);
   return value;
 }
@@ -91,10 +94,11 @@ export class ChatStreamError extends Error {
 }
 export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): AsyncGenerator<string> {
   const started = Date.now();
+  const report = (info: ExecutionInfo) => { recordAiExecution("chat", info, opts.purpose); opts.onExecution?.(info); };
   const cfg = roleConfig("chat");
   if (!cfg) {
     yield* fakeStream(opts.mock());
-    opts.onExecution?.(execution("mock", started, undefined, "not_configured"));
+    report(execution("mock", started, undefined, "not_configured"));
     return;
   }
   const budget = new Budget(Math.min(opts.timeoutMs ?? Infinity, positiveEnv("AI_STREAM_TOTAL_TIMEOUT_MS", 90_000)));
@@ -165,12 +169,14 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
     console.warn(`[ai.stream] ${emitted ? "interrupted" : "fallback"} ${failure.reason}`);
     if (emitted) {
       const info = execution("remote", started, cfg.model, failure.reason);
+      // 部分文字已输出但本次失败，在体检中算fallback；原流协议保留remote中断语义。
+      recordAiExecution("chat", { ...info, mode: "fallback" }, opts.purpose);
       opts.onExecution?.(info);
       throw new ChatStreamError(failure.reason, failure.retryable, info);
     }
     yield* fakeStream(opts.mock());
-    opts.onExecution?.(execution("fallback", started, cfg.model, failure.reason));
-  } else opts.onExecution?.(execution("remote", started, cfg.model));
+    report(execution("fallback", started, cfg.model, failure.reason));
+  } else report(execution("remote", started, cfg.model));
 }
 async function* fakeStream(text: string): AsyncGenerator<string> {
   const chars = Array.from(text);

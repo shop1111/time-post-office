@@ -76,7 +76,7 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
       throw error;
     }
     return chatJson(LetterSchema, letterMessages({ sender: c.sender, reason: writingReason, today: fmtDate(now), writtenAt: fmtDate(c.writtenAt), memories: memText, style: desc, profile: profile.summary, name: profile.name }), {
-      temperature: 0.85, maxTokens: 1400, onExecution,
+      temperature: 0.85, maxTokens: 1400, purpose: "letter", onExecution,
       mock: () => mockLetter({ sender: c.sender, reason: writingReason, memories: mems, style, name: profile.name, writtenAt: c.writtenAt, today: now }),
     });
   });
@@ -84,7 +84,7 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
   const validIds = new Set(mems.map((m) => m.id));
   let cited = [...new Set(draft.cited.filter((id) => validIds.has(id)))];
   if (!cited.length) cited = c.anchorMemoryIds.filter((id) => validIds.has(id));
-  const checked = await stage("check", (onExecution) => checkLetter(draft.body, memText, { onExecution }), isMock(),
+  const checked = await stage("check", (onExecution) => checkLetter(draft.body, memText, { onExecution, purpose: "check" }), isMock(),
     (result) => result.checkStatus === "unchecked" || result.checkStatus === "failed");
 
   return stage("deliver", async () => {

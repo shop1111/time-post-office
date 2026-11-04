@@ -2,6 +2,7 @@ import { z } from "zod";
 import { chat, callTimeout, roleConfig, type CallOptions, type ChatMessage } from "./provider";
 import type { ExecutionInfo } from "@/lib/types";
 import { reportJsonExecution } from "./execution";
+import { recordAiExecution, withoutAiRecording } from "./telemetry";
 
 /** 从模型输出中提取 JSON：容忍 ```json 代码块、前后废话、尾逗号、中文引号 */
 export function extractJson(raw: string): unknown {
@@ -35,6 +36,7 @@ export async function chatJson<T extends z.ZodTypeAny>(
   const deadline = started + callTimeout("chat", opts);
   const finish = (value: z.infer<T>, info: ExecutionInfo) => {
     const execution = { ...info, durationMs: Date.now() - started };
+    recordAiExecution("chat", execution, opts.purpose);
     reportJsonExecution(execution);
     opts.onExecution?.(execution);
     return value;
@@ -49,14 +51,14 @@ export async function chatJson<T extends z.ZodTypeAny>(
     if (remaining <= 0) return fallback("timeout");
     let info: ExecutionInfo | undefined;
     let local: z.infer<T> | undefined;
-    const raw = await chat(history, {
+    const raw = await withoutAiRecording(() => chat(history, {
       json: true,
       temperature: opts.temperature ?? 0.4,
       maxTokens: opts.maxTokens,
       timeoutMs: remaining,
       onExecution: (value) => { info = value; },
       mock: () => { local = opts.mock(); return JSON.stringify(local); },
-    });
+    }));
     // 网络降级与JSON修复分别计数，网络已降级后不再重复请求模型。
     if (info!.mode !== "remote") return finish(local, info!);
     let parsed: z.infer<T>;

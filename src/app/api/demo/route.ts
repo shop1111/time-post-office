@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clearAll, loadDemo } from "@/lib/demo/seed";
+import { withAiPurpose } from "@/lib/ai/telemetry";
 
 export const runtime = "nodejs";
 
@@ -9,6 +10,6 @@ export async function POST(req: Request) {
     await clearAll();
     return NextResponse.json({ ok: true });
   }
-  const r = await loadDemo();
+  const r = await withAiPurpose("demo", () => loadDemo());
   return NextResponse.json({ ok: true, ...r });
 }

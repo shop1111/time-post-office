@@ -2,6 +2,7 @@ import type { Job, Prisma } from "@prisma/client";
 import { db, parseJson } from "@/lib/db";
 import { embed } from "@/lib/ai/provider";
 import { observeJsonExecution } from "@/lib/ai/execution";
+import { withAiPurpose } from "@/lib/ai/telemetry";
 import { extractEntry, persistEntry, readEntryState, savedExtraction } from "@/lib/memory/extract";
 import { refreshProfile } from "@/lib/memory/profile";
 import { generateStoryCard } from "@/lib/story";
@@ -95,8 +96,8 @@ async function execute(run: Run, ready: Promise<void>): Promise<FinalizeStatusRe
       try {
         let committed: FinalizeStageEvent[] | undefined;
         switch (stage) {
-          case "extract": next.extraction = await extractEntry(run.entryId, { onExecution }); break;
-          case "embed": next.vectors = (await embed(next.extraction!.memories.map((m) => m.content), { onExecution })).map((v) => Array.from(v)); break;
+          case "extract": next.extraction = await extractEntry(run.entryId, { onExecution, purpose: "extract" }); break;
+          case "embed": next.vectors = (await embed(next.extraction!.memories.map((m) => m.content), { onExecution, purpose: "embed" })).map((v) => Array.from(v)); break;
           case "persist":
             await persistEntry(run.entryId, next.extraction!, next.vectors!.map((v) => Float32Array.from(v)), async (tx, saved) => {
               next.extraction = saved.extraction;
@@ -106,9 +107,9 @@ async function execute(run: Run, ready: Promise<void>): Promise<FinalizeStatusRe
               committed = await commitStage(run, stage, started, next, tx);
             });
             break;
-          case "profile": await observeJsonExecution(onExecution, () => refreshProfile()); break;
+          case "profile": await withAiPurpose("profile", () => observeJsonExecution(onExecution, () => refreshProfile())); break;
           case "story":
-            await generateStoryCard(run.entryId, { onExecution }, async (tx, card) => {
+            await generateStoryCard(run.entryId, { onExecution, purpose: "story" }, async (tx, card) => {
               next.cardId = card.id;
               committed = await commitStage(run, stage, started, next, tx);
             });
