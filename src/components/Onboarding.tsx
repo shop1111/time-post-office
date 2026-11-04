@@ -40,7 +40,7 @@ export function Onboarding() {
 
       <div className="mt-6 flex flex-col items-center gap-2 text-sm text-ink-3">
         <span>想先看看用了半年会是什么样子？</span>
-        <DemoButton label="载入示例人生「林小满」" />
+        <DemoButton label="导入示例数据" />
         <Link href="/about" className="mt-2 underline-offset-4 hover:underline">
           了解它是怎么工作的
         </Link>

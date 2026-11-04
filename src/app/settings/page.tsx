@@ -22,6 +22,8 @@ export default async function Settings() {
   })) : {};
   const profile = await getProfile();
   const [entries, memories, letters, instant] = await Promise.all([db.entry.count({ where: CAPSULE_WHERE }), db.memory.count({ where: ACTIVE_MEMORY }), db.letter.count(), instantReplies()]);
+  // 有数据时导入示例才需要确认（会替换现有数据）
+  const hasData = entries + memories + letters > 0;
   const rows: Array<[string, string | null, string]> = [
     ["对话 / 写信 / 代笔回信", st.chat, "CHAT_*"],
     ["看图", st.vision, "VISION_*"],
@@ -62,12 +64,31 @@ export default async function Settings() {
       </section>
 
       <section className="card p-5">
+        <h2 className="font-hand text-xl">示例数据</h2>
+        <p className="mt-1 text-sm text-ink-2">想先看看用起来是什么样子，可以导入一份示例：林小满在杭州的半年，包括胶囊、小局的来信和一位收件人「小鹿」。</p>
+        <div className="mt-4">
+          <DemoButton
+            label="导入示例数据"
+            className="btn btn-primary"
+            confirmText={hasData ? "导入示例会替换你现在的所有胶囊、记忆、收件人和信件，且无法恢复。确定吗？" : undefined}
+          />
+        </div>
+        <details className="mt-4 text-sm text-ink-2">
+          <summary className="cursor-pointer text-ink-3">导入后可以试试</summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 leading-7">
+            <li>回到主页：小局注意到小满最近一周情绪低落，会送来一封问候信；半年前写给未来自己的信今天也到了。</li>
+            <li>打开下面的「回信立即送达」，去邮件页写信给小鹿，刷新一下就能收到她的回信，展开「为什么」能看到小局判断她知道哪些事。</li>
+            <li>新建一个「平行时空的自己」，问问 TA 当时如果做了另一个选择，现在在干什么。</li>
+          </ol>
+        </details>
+      </section>
+
+      <section className="card p-5">
         <h2 className="font-hand text-xl">数据</h2>
         <p className="mt-1 text-sm text-ink-2">
           {entries} 颗胶囊 · {memories} 条记忆 · {letters} 封信。所有数据保存在本地 SQLite，不会上传到除你配置的模型以外的任何地方。
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <DemoButton label="载入示例人生「林小满」" confirmText="载入示例会清空当前所有数据，确定吗？" />
           <a href="/api/export" className="btn btn-ghost">
             <Download size={14} /> 导出全部数据
           </a>
@@ -78,13 +99,6 @@ export default async function Settings() {
       <section className="card p-5 text-sm text-ink-2">
         <h2 className="font-hand text-xl text-ink">演示工具</h2>
         <DemoTools instant={instant} />
-        <h3 className="mt-5 font-medium text-ink">演示小贴士</h3>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 leading-7">
-          <li>载入示例人生后回到主页：小局注意到小满最近一周情绪低落，会送来一封问候信；半年前写给未来自己的信今天也到了。</li>
-          <li>打开「回信立即送达」，去邮件页写信给小鹿，刷新一下就能收到她的回信，展开「为什么」能看到小局判断她知道哪些事。</li>
-          <li>新建一个「平行时空的自己」，问问 TA 当时如果做了另一个选择，现在在干什么。</li>
-          <li>放一颗照片胶囊，体验小局的追问和「想起了」的记忆联想。</li>
-        </ol>
         <Link href="/about" className="mt-3 inline-block text-stamp underline-offset-4 hover:underline">
           查看技术架构 →
         </Link>
