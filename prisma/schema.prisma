@@ -49,6 +49,18 @@ model EntryMessage {
   @@index([entryId])
 }
 
+/// 「和小局聊聊」：胶囊之外随时的闲聊
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String // user | assistant
+  content   String
+  /// 小局这一轮的动作：chat | answer | comfort | follow | deflect:*
+  act       String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 /// 小局自己的事：它在信里、对话里说过的关于自己和邮局的细节。之后检索出来，保证前后不矛盾
 model CuratorNote {
   id        String   @id @default(cuid())

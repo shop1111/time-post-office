@@ -17,6 +17,10 @@ import { getProfile, styleText } from "@/lib/memory/profile";
 import { instantReplies } from "@/lib/correspondents";
 import { LETTER_ENTRY_TYPE } from "@/lib/capsules";
 import type { LetterKnowledge, KnowledgeVerdict } from "@/lib/types";
+import { classifyInput, deflectionLetter } from "@/lib/curator/guard";
+import { loadCuratorContext, rememberSelf, renderCuratorContext } from "@/lib/curator/context";
+import { planLetter } from "@/lib/curator/planner";
+import { polishCuratorLetter } from "@/lib/curator/letters";
 
 const HOUR = 3_600_000;
 export const REPLY_MIN_HOURS = 2;
@@ -127,6 +131,26 @@ export async function writeReply(out: Letter, to: Correspondent, now: Date) {
   const threadText = formatThread(thread, to.name, profile.name);
   const letterText = `《${out.subject}》\n${out.body}`;
 
+  // 输入防线：信里在注入、套设定、让收信人干别的活，或者流露出危机信号 → 不交给模型代笔
+  const verdict = classifyInput(letterText);
+  const isCurator = to.kind !== "person" && to.kind !== "parallel_self";
+  if (verdict.kind !== "ok" && !(verdict.kind === "identity" && !isCurator)) {
+    const who = to.kind === "parallel_self" ? "平行时空里的你" : to.name;
+    const d = deflectionLetter(verdict.kind, { sender: who, userName: profile.name, isCurator });
+    console.warn(`[reply] guard ${verdict.kind} ${verdict.hits.join(",")}`);
+    return db.letter.create({
+      data: {
+        sender: isCurator ? "curator" : "persona", correspondentId: to.id, inReplyToId: out.id, subject: d.subject, body: d.body,
+        triggerType: "reply",
+        reason: verdict.kind === "crisis"
+          ? `你在${fmtDate(out.writtenAt)}寄出的信里，有些话让人担心。这封回信没有交给 agent 代笔，附上了可以求助的热线。`
+          : `你在${fmtDate(out.writtenAt)}寄出的信里有让收信人做别的事的内容，这封回信没有交给 agent 代笔。`,
+        checkStatus: "passed", checkNote: "防御层直接回信", citedMemoryIds: "[]", knowledge: JSON.stringify({ known: [], unknown: [] }),
+        writtenAt: now, scheduledAt: now, deliveredAt: now,
+      },
+    });
+  }
+
   let draft: z.infer<typeof ReplySchema>;
   let factText: string;
   let knowledge: LetterKnowledge;
@@ -182,11 +206,18 @@ export async function writeReply(out: Letter, to: Correspondent, now: Date) {
     validIds = new Set(mems.map((m) => m.id));
     knowledge = { known: [], unknown: [] };
     factText = formatMemories(mems);
-    draft = await chatJson(
+    const ctx = await loadCuratorContext(now);
+    const plan = planLetter({ type: "reply", stage: ctx.relationship.stage, seed: out.id.length * 7 + out.body.length, userLetterLen: out.body.length });
+    const mock = () => mockCuratorLetter({ type: "reply", reason: "", memories: mems, style, name: profile.name, today: now, userLetter: out.body, plan, world: ctx.world });
+    const raw = await chatJson(
       ReplySchema,
-      letterMessages({ reason: `你在${fmtDate(out.writtenAt)}给小局写了一封信`, today: fmtDate(now), memories: factText, profile: profile.summary, name: profile.name, userLetter: letterText }),
-      { temperature: 0.85, maxTokens: 1400, mock: () => mockCuratorLetter({ type: "reply", reason: "", memories: mems, style, name: profile.name, today: now, userLetter: out.body }) },
+      letterMessages({
+        reason: `你在${fmtDate(out.writtenAt)}给小局写了一封信`, today: fmtDate(now), memories: factText, profile: profile.summary, name: profile.name, userLetter: letterText,
+        curator: renderCuratorContext(ctx, profile.name, { letters: true }), plan,
+      }),
+      { temperature: 0.9, maxTokens: 1400, mock },
     );
+    draft = await polishCuratorLetter(raw, mock);
   }
 
   const { body, checkStatus, checked } = await factCheck(draft.body, factText, checkNote);
@@ -197,7 +228,7 @@ export async function writeReply(out: Letter, to: Correspondent, now: Date) {
       ? `这是小局给你${fmtDate(out.writtenAt)}那封信《${out.subject}》的回信。（${checked}）`
       : `你在${fmtDate(out.writtenAt)}给${who}寄了一封信《${out.subject}》。这封回信由 agent 以${who}的身份代笔，${to.kind === "person" ? `只用了${to.name}会知道的事` : `只用了 ${fmtDate(to.momentAt!)} 分岔之前的真实回忆`}。（${checked}）`;
 
-  return db.letter.create({
+  const created = await db.letter.create({
     data: {
       sender,
       correspondentId: to.id,
@@ -215,6 +246,8 @@ export async function writeReply(out: Letter, to: Correspondent, now: Date) {
       deliveredAt: now,
     },
   });
+  if (sender === "curator") await rememberSelf(created.body, "letter", created.id);
+  return created;
 }
 
 /** 某个人的候选记忆：与这封信、那个瞬间相关的检索结果 + 提到他的记忆 */

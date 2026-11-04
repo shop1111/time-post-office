@@ -79,8 +79,15 @@ export interface ExecutionInfo {
 export interface ApiError { error: string; code: string; retryable: boolean }
 export interface StreamError { code: string; message: string; retryable: boolean }
 export type HeartbeatEvent = Record<string, never>;
-export interface InterviewDoneEvent { final: boolean; execution: ExecutionInfo }
+export interface InterviewDoneEvent {
+  final: boolean;
+  /** 小局收尾了，但还没聊满上限：可以「再聊一会」 */
+  canExtend: boolean;
+  execution: ExecutionInfo;
+}
 export type InterviewErrorEvent = StreamError;
+/** 「和小局聊聊」一轮结束 */
+export interface ChatDoneEvent { execution: ExecutionInfo }
 export interface InterviewMetaEvent {
   round: number;
   maxRounds: number;
@@ -94,6 +101,8 @@ export interface InterviewMetaEvent {
 export interface InterviewEvents {
   meta: InterviewMetaEvent;
   delta: string;
+  /** 输出检查没通过：用这段文字整体替换已经流式显示的回复 */
+  replace: string;
   done: InterviewDoneEvent;
   error: InterviewErrorEvent;
   heartbeat: HeartbeatEvent;

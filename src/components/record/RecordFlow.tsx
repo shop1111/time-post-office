@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, Mic, PenLine, Send, X, Check, RotateCcw, AlertCircle } from "lucide-react";
+import { Camera, Mic, PenLine, Send, X, Check, RotateCcw, AlertCircle, MessageCircle } from "lucide-react";
 import { PhotoPicker, type PhotoInfo } from "./PhotoPicker";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { RecallChips, type Recalled } from "./RecallChips";
@@ -17,6 +17,7 @@ import { postSSE, SSEHttpError } from "@/lib/sse";
 import { cn, fmtCN, photoUrl } from "@/lib/utils";
 import { KIND_LABEL, type ExecutionInfo, type FinalizeStatusResponse, type InterviewDoneEvent, type InterviewMetaEvent, type MemoryKind, type StreamError } from "@/lib/types";
 import type { RankWeights } from "@/lib/memory/rank";
+import { EXTEND_MESSAGE } from "@/lib/curator/planner";
 
 type Stage = "compose" | "sending" | "interview" | "finalizing";
 type Kind = "photo" | "voice" | "text";
@@ -35,11 +36,15 @@ interface Msg {
 export interface ResumeState {
   entry: { id: string; type: Kind; text: string; place: string | null; occurredAt: string; photoPath: string | null };
   messages: Array<{ role: "user" | "assistant"; content: string }>;
+  /** 小局已经收尾（轮数由后端的对话策略决定） */
+  final: boolean;
+  /** 收尾了但还没聊满上限，可以「再聊一会」 */
+  canExtend: boolean;
+  /** 用户选了「直接存入」：不聊天，直接整理（刷新后也接着整理） */
+  direct: boolean;
   job: FinalizeStatusResponse | null;
 }
 
-// 与后端追问轮数上限一致（达到上限时后端返回 INTERVIEW_LIMIT_REACHED，这里只用于刷新后的初始显示）
-const MAX_ROUNDS = 3;
 const BUSY_RETRIES = 5;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -58,7 +63,7 @@ function toLocalInput(d: Date) {
 
 export function RecordFlow({ initialType, today, resume }: { initialType: Kind; today: string; resume?: ResumeState | null }) {
   const [kind, setKind] = useState<Kind>(resume?.entry.type ?? initialType);
-  const [stage, setStage] = useState<Stage>(resume ? (resume.job ? "finalizing" : "interview") : "compose");
+  const [stage, setStage] = useState<Stage>(resume ? (resume.job || resume.direct ? "finalizing" : "interview") : "compose");
   const [photo, setPhoto] = useState<PhotoInfo | null>(null);
   const [audio, setAudio] = useState<Blob | null>(null);
   const [text, setText] = useState(resume?.entry.text ?? "");
@@ -67,7 +72,11 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
   const [entryId, setEntryId] = useState<string | null>(resume?.entry.id ?? null);
   const [msgs, setMsgs] = useState<Msg[]>(resume?.messages ?? []);
   const [streaming, setStreaming] = useState(false);
-  const [final, setFinal] = useState(() => (resume?.messages.filter((m) => m.role === "assistant").length ?? 0) >= MAX_ROUNDS);
+  const [final, setFinal] = useState(() => resume?.final ?? false);
+  const [canExtend, setCanExtend] = useState(() => resume?.canExtend ?? false);
+  /** 「直接存入」：寄出后不和小局聊，直接整理 */
+  const [direct, setDirect] = useState(() => !!resume && (resume.direct || (!!resume.job && !resume.messages.length)));
+  const [autoFinalize, setAutoFinalize] = useState(false);
   const [reply, setReply] = useState("");
   const [forgotten, setForgotten] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
@@ -94,11 +103,19 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     if (!resume) return;
     const t = setTimeout(() => {
       if (resume.job) fin.resume(resume.job);
+      else if (resume.direct) fin.start();
       else if (!resume.messages.some((m) => m.role === "assistant")) ask(resume.entry.id);
     }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 直接存入：等 entryId 写进状态、useFinalize 拿到新的 id 之后再开始整理
+  useEffect(() => {
+    if (!autoFinalize || !entryId) return;
+    setAutoFinalize(false);
+    fin.start();
+  }, [autoFinalize, entryId, fin]);
 
   // 只能选已经发生的时间
   const maxWhen = toLocalInput(new Date(today));
@@ -116,8 +133,9 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
 
   const canSend = kind === "photo" ? !!photo : kind === "voice" ? !!audio || text.trim().length > 0 : text.trim().length > 0;
 
-  async function send() {
+  async function send(skipChat = false) {
     setError("");
+    setDirect(skipChat);
     setStage("sending");
     const fd = new FormData();
     fd.set("type", kind);
@@ -141,8 +159,13 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     }
     setEntryId(data.entry.id);
     // 记下这颗胶囊，刷新页面也能接着追问或看到整理进度
-    window.history.replaceState(null, "", `/capsules/new?entry=${data.entry.id}`);
+    window.history.replaceState(null, "", `/capsules/new?entry=${data.entry.id}${skipChat ? "&direct=1" : ""}`);
     sendTimer.current = setTimeout(() => {
+      if (skipChat) {
+        setStage("finalizing");
+        setAutoFinalize(true);
+        return;
+      }
       setStage("interview");
       ask(data.entry.id);
     }, 900);
@@ -156,7 +179,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     });
 
   /** 跑一轮追问流；另一轮还没结束（比如刚刷新页面）时稍等再试 */
-  async function streamRound(id: string, message?: string): Promise<RoundOutcome> {
+  async function streamRound(id: string, message?: string, extend?: boolean): Promise<RoundOutcome> {
     for (let attempt = 0; ; attempt++) {
       const ctrl = new AbortController();
       askCtrl.current = ctrl;
@@ -164,7 +187,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
       try {
         await postSSE(
           `/api/entries/${id}/interview`,
-          { message },
+          { message, ...(extend ? { extend: true } : {}) },
           (event, data) => {
             if (event === "meta") {
               const d = data as InterviewMetaEvent;
@@ -172,9 +195,12 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
               patchLast(() => ({ related: d.related, weights: d.weights }));
             } else if (event === "delta") {
               patchLast((m) => ({ content: m.content + (data as string) }));
+            } else if (event === "replace") {
+              patchLast(() => ({ content: data as string }));
             } else if (event === "done") {
               const d = data as InterviewDoneEvent;
               setFinal(d.final);
+              setCanExtend(d.final && d.canExtend);
               patchLast(() => ({ execution: d.execution }));
               ended = { kind: "done" };
             } else if (event === "error") {
@@ -200,17 +226,18 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     }
   }
 
-  async function ask(id: string, message?: string) {
+  async function ask(id: string, message?: string, extend?: boolean) {
     setError("");
     setMsgs((m) => [...m, ...(message ? [{ role: "user" as const, content: message }] : []), { role: "assistant", content: "" }]);
     setStreaming(true);
-    const outcome = await streamRound(id, message);
+    const outcome = await streamRound(id, message, extend);
     if (outcome.kind === "aborted") return;
     setStreaming(false);
     if (outcome.kind === "limit") {
       // 后端说追问已经结束：这一轮的占位和输入都没保存，直接去收进邮局
       setMsgs((m) => m.slice(0, message ? -2 : -1));
       setFinal(true);
+      setCanExtend(false);
     } else if (outcome.kind === "failed") {
       patchLast(() => ({ failed: { ...outcome.error, retry: message } }));
     }
@@ -226,7 +253,16 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
   function retryRound(retry?: string) {
     if (!entryId || streaming) return;
     dropFailed();
-    ask(entryId, retry);
+    ask(entryId, retry, retry === EXTEND_MESSAGE);
+  }
+
+  /** 小局收尾后还想接着聊：替用户说一句「再聊一会儿吧」，后端放开到 10 轮 */
+  function chatMore() {
+    if (!entryId || streaming) return;
+    dropFailed();
+    setFinal(false);
+    setCanExtend(false);
+    ask(entryId, EXTEND_MESSAGE, true);
   }
 
   /** 把没发成功的话放回输入框，改一改再发 */
@@ -272,12 +308,13 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
               </motion.div>
               <p className="mt-3 font-hand text-lg">正在放进胶囊…</p>
               {kind === "photo" && <p className="mt-1 text-xs text-ink-3">小局在仔细看你的照片</p>}
+              {direct && <p className="mt-1 text-xs text-ink-3">这次不聊天，直接帮你整理</p>}
             </motion.div>
           )}
         </AnimatePresence>
 
         <h1 className="font-hand text-3xl">放一颗胶囊</h1>
-        <p className="mt-1 text-sm text-ink-2">记下生活里的一个瞬间。放进去以后，小局会问你几个问题，帮你把那天的故事补完整。</p>
+        <p className="mt-1 text-sm text-ink-2">记下生活里的一个瞬间。放进去以后，小局会问你几个问题，帮你把那天的故事补完整；不想聊的话，也可以直接存入。</p>
         <div className="mt-4 inline-flex rounded-full border border-line bg-card p-1">
           {TABS.map(({ k, label, icon: Icon }) => (
             <button key={k} onClick={() => setKind(k)} className={cn("flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm transition", kind === k ? "bg-stamp text-white" : "text-ink-2")}>
@@ -306,9 +343,12 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
             </label>
           </div>
           {error && <p className="text-sm text-stamp">{error}</p>}
-          <div className="flex justify-end">
-            <button className="btn btn-primary !px-6" disabled={!canSend || stage === "sending"} onClick={send}>
-              <Send size={16} /> 放进去
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button className="btn btn-ghost !px-5" disabled={!canSend || stage === "sending"} onClick={() => send(true)}>
+              <Check size={16} /> 直接存入
+            </button>
+            <button className="btn btn-primary !px-6" disabled={!canSend || stage === "sending"} onClick={() => send()}>
+              <Send size={16} /> 放进去，和小局聊聊
             </button>
           </div>
         </div>
@@ -326,7 +366,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
         )}
         <div>
           <div className="text-xs text-ink-3">{fmtCN(new Date(when))}{place ? ` · ${place}` : ""}</div>
-          <h1 className="font-hand text-2xl">小局想多了解一点</h1>
+          <h1 className="font-hand text-2xl">{direct ? "小局在帮你收好这一天" : "小局想多了解一点"}</h1>
         </div>
       </div>
       {text && <p className="mt-3 rounded-xl bg-paper-2 px-4 py-3 font-hand text-[17px] leading-8 text-ink-2">{text}</p>}
@@ -381,9 +421,16 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
       {stage === "interview" && (
         <div className="sticky bottom-20 mt-6 md:bottom-4">
           {final && !streaming ? (
-            <motion.button initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onClick={finalize} className="btn btn-primary w-full !py-3 text-base">
-              📮 把这一天收进时光邮局
-            </motion.button>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col gap-2 sm:flex-row">
+              <button onClick={finalize} className="btn btn-primary flex-1 !py-3 text-base">
+                📮 把这一天收进时光邮局
+              </button>
+              {canExtend && (
+                <button onClick={chatMore} className="btn btn-ghost !py-3 text-base sm:!px-6">
+                  <MessageCircle size={16} /> 再聊一会
+                </button>
+              )}
+            </motion.div>
           ) : (
             <div className="card flex items-end gap-2 p-2">
               <textarea

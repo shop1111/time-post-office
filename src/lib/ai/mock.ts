@@ -4,6 +4,9 @@
  */
 import type { StyleFingerprint } from "@/lib/types";
 import { flavor, gentleCatchphrase } from "@/lib/memory/style";
+import type { TurnPlan, LetterPlan } from "@/lib/curator/planner";
+import { termPhrase, type WorldState } from "@/lib/curator/world";
+import type { Stage } from "@/lib/curator/relationship";
 
 interface MemLite {
   id: string;
@@ -26,37 +29,87 @@ export function mockInterview(c: {
   type: string;
   text: string;
   place?: string | null;
-  round: number;
-  maxRounds: number;
   lastUser?: string;
   related: MemLite[];
+  plan: TurnPlan;
+  world: WorldState;
+  stage: Stage;
 }): string {
-  const seed = seedOf(c.text + c.round);
+  const seed = seedOf(c.text + (c.lastUser ?? "") + c.plan.act);
   const echo = c.lastUser ? summarizeEcho(c.lastUser) : "";
-  if (c.round >= c.maxRounds - 1) {
-    const detail = echo || (c.place ? `${c.place}的那一天` : "这一天");
-    return `${echo ? `「${detail}」——` : ""}谢谢你愿意把这些讲给我听。我把${c.place ? `${c.place}的` : "今天的"}这一页好好收进时光邮局了，等哪天你想回来看看，它会一直在这里等你。`;
-  }
+  const detail = summarizeEcho(c.text);
   const rel = c.related[0];
-  if (c.round === 0) {
-    const opener =
-      c.type === "photo"
-        ? pick(["这张照片的光线好温柔。", "光看照片就觉得那天很值得被记住。", "这一帧拍得真好，像电影里的画面。"], seed)
-        : c.type === "voice"
-          ? pick(["听你的声音，能感觉到那天的情绪。", "谢谢你愿意说给我听。"], seed)
-          : pick(["读完有点被触动。", "这段文字里有好多细节。"], seed);
-    const recall = rel ? `这让我想起${md(rel.occurredAt)}你说过「${rel.content.slice(0, 22)}」。` : "";
-    const q =
-      c.type === "photo"
-        ? pick(["那天是和谁一起？按下快门的那一刻在想什么？", "照片外面发生了什么？是谁陪着你？"], seed)
-        : pick(["那一刻你身边有谁？", "这件事里，让你印象最深的是哪个瞬间？"], seed);
-    return `${opener}${recall}${q}`;
+  const night = c.world.timeOfDay === "夜里" || c.world.timeOfDay === "深夜";
+  switch (c.plan.act) {
+    case "notice": {
+      const opener =
+        c.type === "photo"
+          ? pick([`照片收到了${c.place ? `，${c.place}` : ""}。`, "这张我拿在手里看了一会儿。"], seed)
+          : c.type === "voice"
+            ? pick(["你的声音我听了两遍。", "语音收到了。"], seed)
+            : detail ? `「${detail}」——这句我多看了两眼。` : "收到了。";
+      const recall = rel ? `${md(rel.occurredAt)}你好像也说过「${rel.content.slice(0, 18)}」。` : "";
+      const q = c.type === "photo"
+        ? pick(["那天谁在镜头外面？", "按快门的时候在想什么？", "这是谁拍的？"], seed)
+        : pick(["那会儿身边有谁？", "这是在哪儿？", "后来呢？"], seed);
+      return `${opener}${recall}${q}`;
+    }
+    case "ask":
+      return `${echo ? `「${echo}」，` : ""}${pick(["当时谁在旁边？", "那是在哪儿？", "那一下你在想什么？", "后来呢？", "是第一次吗？"], seed)}`;
+    case "follow":
+      return `${echo ? `${echo}啊。` : "嗯。"}${pick([`我这边${c.world.scene}。`, "我记下了。", "这个我想象得出来。"], seed)}${pick(["想说再说。", "", "不急。"], seed >> 2)}`;
+    case "answer":
+      return `我啊，${c.world.timeOfDay}${pick([c.world.scene, `在给档案柜换标签，瓶子里插着${c.world.vase}`], seed)}。${pick(["你呢？", "没什么特别的。", ""], seed >> 1)}`;
+    case "comfort":
+      return pick(["嗯，我在。", "先不急着说。我陪你待一会儿。", "这几天辛苦了。", "……我听着呢。"], seed);
+    case "reopen": {
+      const hook = detail ? `刚才「${detail}」那里还没细说。` : "";
+      return `${pick(["好呀。", "行，那再坐会儿。", "我正好也不忙。"], seed)}${hook}${pick(["那天最想留住的是哪一下？", "要是再来一次，你会想改哪一点？", "这件事你还跟谁说过？"], seed >> 1)}`;
+    }
+    case "close": {
+      const keep = echo || detail;
+      if (c.plan.last) {
+        const bye = night ? "早点睡。" : pick(["回头见。", "下次再来坐。"], seed >> 2);
+        return `今天聊得差不多啦。${keep ? `「${keep}」我记下了，` : ""}${pick(["邮票都在柜台上睡着了。", "茶都续了两回了。"], seed)}${bye}`;
+      }
+      const where = pick([`档案柜${c.world.term.current}那一格`, "柜台左手边第二个抽屉", "靠窗那排档案柜"], seed);
+      const cat = pick(["邮票在上面踩了一脚，算是盖了章。", "邮票闻了闻，没意见。", ""], seed >> 1);
+      const bye = night ? pick(["早点睡。", "晚安。"], seed >> 2) : pick(["回头见。", "下次再来。", "去忙吧。"], seed >> 2);
+      return `${keep ? `「${keep}」我记住了。` : ""}放在${where}了。${cat}${bye}`;
+    }
+    case "repair":
+      return mockRepair(c.world, seed, detail);
   }
-  const q = pick(
-    ["如果给那一天打个分，你会打几分？为什么？", "这件事对现在的你来说，意味着什么？", "有没有一个小细节，是你特别不想忘掉的？"],
-    seed,
-  );
-  return `${echo ? `原来是这样，${echo}，难怪你会记住。` : "嗯，我记下了。"}${q}`;
+}
+
+/** 用户在说小局的说话方式：不道歉，直接多说点具体的 */
+function mockRepair(world: WorldState, seed: number, topic: string): string {
+  return `${topic ? `那接着说「${topic}」。` : ""}我这边${world.timeOfDay}，${world.scene}，瓶子里插着${world.vase}，${termPhrase(world.term)}。${pick(["你刚才说的那件事，我其实还想多听一点：当时身边有谁？", "说真的，我挺想知道你今天最想跟人说的是哪件事。"], seed)}`;
+}
+
+/** 「和小局聊聊」的演示回复 */
+export function mockChat(c: { lastUser: string; act: string; related: MemLite[]; world: WorldState }): string {
+  const seed = seedOf(c.lastUser + c.act);
+  const echo = summarizeEcho(c.lastUser);
+  const rel = c.related[0];
+  switch (c.act) {
+    case "repair":
+      return mockRepair(c.world, seed, "");
+    case "recall":
+      return rel
+        ? `记得。${md(rel.occurredAt)}你跟我说过「${rel.content.slice(0, 24)}」，我一直记着。你放进来的每颗胶囊我都翻过，还想多知道一点你最近在忙什么。`
+        : "记得你，只是你放进来的胶囊还不多，我知道的还太少。多跟我说说你自己吧，喜欢什么、最近在忙什么。";
+    case "answer":
+      return `我啊，${c.world.timeOfDay}${pick([c.world.scene, `在给档案柜换标签，瓶子里插着${c.world.vase}`], seed)}。${pick(["你呢？", "没什么特别的。", ""], seed >> 1)}`;
+    case "comfort":
+      return pick(["嗯，我在。", "先不急着说。我陪你待一会儿。", "辛苦了。想说就说，不想说也行。", "……我听着呢。"], seed);
+    case "follow":
+      return `${echo ? `${echo}啊。` : "嗯。"}${pick([`我这边${c.world.scene}。`, "我在呢。", "不急，慢慢说。"], seed)}`;
+    default: {
+      const recall = rel ? pick([`说起来，${md(rel.occurredAt)}你跟我讲过「${rel.content.slice(0, 16)}」。`, ""], seed >> 1) : "";
+      return `${echo ? `「${echo}」——` : ""}${pick(["这个我想听。", "嗯，我记着呢。", "有意思。"], seed)}${recall}${pick(["后来呢？", "", "你当时怎么想的？"], seed >> 2)}`;
+    }
+  }
 }
 
 function summarizeEcho(s: string) {
@@ -74,8 +127,19 @@ export function letterEcho(body: string) {
   return summarizeEcho(rest.join("\n"));
 }
 
-/** 小局来信：问候 / 安慰 / 回顾 / 回复用户写给小局的信 */
-export function mockCuratorLetter(c: {
+/** 小局来信：按信的形态（LetterPlan）调整模板——要不要附言、结尾问不问 */
+export function mockCuratorLetter(c: Parameters<typeof baseCuratorLetter>[0] & { plan?: LetterPlan; world?: WorldState }) {
+  const out = baseCuratorLetter(c);
+  let paras = out.body.split("\n\n");
+  if (c.plan && !c.plan.endWithQuestion && paras.length > 3) {
+    const i = paras.length - 2;
+    if (/[？?]|回信|写信给我/.test(paras[i])) paras = [...paras.slice(0, i), ...paras.slice(i + 1)];
+  }
+  if (c.plan?.shape === "带附言的信" && c.world) paras.splice(paras.length - 1, 0, `P.S. ${c.world.scene}。`);
+  return { ...out, body: paras.join("\n\n") };
+}
+
+function baseCuratorLetter(c: {
   type: string;
   reason: string;
   memories: MemLite[];
@@ -93,7 +157,7 @@ export function mockCuratorLetter(c: {
     const body = [
       `${c.name}，你的信我收到了：`,
       `${echo ? `读到「${echo}」那一句，我在邮局的窗边停了好一会儿。` : "你的信我读了两遍。"}${a ? `这让我想起${md(a.occurredAt)}你放进来的那颗胶囊：${toYou(a.content)}。` : ""}`,
-      `谢谢你愿意写信给我。你写下的这些，我都会好好收着。`,
+      `你写的这些，我都收在柜台抽屉里了。`,
       `最近还有什么想告诉我的吗？开心的、烦心的，都可以。`,
       sign,
     ].join("\n\n");
