@@ -29,6 +29,8 @@ beforeEach(async () => {
   await db.$transaction([db.job.deleteMany(), db.letter.deleteMany(), db.entry.deleteMany(), db.memory.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany(), db.setting.deleteMany(), db.monthlyRecap.deleteMany()]);
 });
 afterAll(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await f.fixture.cleanup(); });
+// 这些用例要等真实的「收进邮局」任务跑完，冷启动时 5 秒的默认用例超时不够
+vi.setConfig({ testTimeout: 30_000 });
 const reply = (id: string, text: string) => POST(new Request("http://test/letter", { method: "POST", body: JSON.stringify({ action: "reply", reply: text }) }), { params: Promise.resolve({ id }) });
 async function setup() {
   const plans = await Promise.all(["准备摄影考试", "下周工作面试"].map((content) => db.memory.create({ data: { content, kind: "plan", occurredAt: new Date() } })));
@@ -36,7 +38,8 @@ async function setup() {
   return { plans, letter };
 }
 async function settled(id: string) {
-  await vi.waitFor(async () => expect(["completed", "partial", "failed"]).toContain((await getFinalizeStatus(id)).status));
+  // 默认只等 1 秒；刚克隆后第一次跑（冷启动）整理会慢一些
+  await vi.waitFor(async () => expect(["completed", "partial", "failed"]).toContain((await getFinalizeStatus(id)).status), { timeout: 15_000, interval: 50 });
   return getFinalizeStatus(id);
 }
 it("回信不关闭未做计划；完成回复只关闭真正被问的目标，任务含故事卡片", async () => {
