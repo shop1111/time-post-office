@@ -72,7 +72,6 @@ export function CorrespondentForm({ today, onCreated }: { today: string; onCreat
               <input className="input" placeholder="例如：话不多，爱开玩笑" value={voice} onChange={(e) => setVoice(e.target.value)} />
             </Field>
           </div>
-          <p className="text-xs leading-5 text-ink-3">回信由 agent 以 TA 的身份代笔。TA 只会知道你们之间的信、那个瞬间，以及小局判断 TA 本来就会知道的事。</p>
         </>
       ) : (
         <>
@@ -85,7 +84,6 @@ export function CorrespondentForm({ today, onCreated }: { today: string; onCreat
           <Field label="怎么称呼 TA（可选）">
             <input className="input" placeholder="例如：留在老家的我" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <p className="text-xs leading-5 text-ink-3">回信由 agent 代笔。TA 只记得分岔点之前的真实经历，之后的人生是另一种可能。</p>
         </>
       )}
       <div className="flex justify-end">
