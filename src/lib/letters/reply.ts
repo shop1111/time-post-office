@@ -6,9 +6,9 @@ import type { CallOptions } from "@/lib/ai/provider";
 type Plan = { id: string; content: string };
 // 「没考好/没考过」是有结果的；「准备…考」只认紧挨着的说法，「准备了三个月终于考完了」不算还没做。
 const pending = /还没|尚未|未完成|没(?:有)?考(?![好过砸])|推迟|延期|改天|还在准备|结果.*(?:什么时候|何时)|(?:打算|准备|计划)(?:要|去|再|在|下周|明天|下个月|月底|周末)?(?:考|做|完成)/;
-const completed = /考完|考试结束|考过了|考了|通过了|过了|没过|结果(?:出来|公布|是)|完成了|已完成|搞定|结束了|跑完|面试完|面试结束|答辩完|办完|做完|取消了|不去了|放弃了/;
+const completed = /考完|考试结束|考过了|考了|没考[好过]|考砸|挂了|没通过|通过了|过了|没过|结果(?:出来|公布|是)|完成了|已完成|搞定|结束了|跑完|面试完|面试结束|答辩完|办完|做完|取消了|不去了|放弃了/;
 const domains = [
-  { plan: /考试|考证|考研|考驾|驾照|科目|笔试|考一次/, reply: /考完|考试|考过|考了|考证|驾照|笔试|成绩/ },
+  { plan: /考试|考证|考研|考驾|驾照|科目|笔试|考一次/, reply: /考完|考试|考过|考了|没考[好过]|考砸|考证|驾照|笔试|成绩/, shortResult: /^(?:挂了|没通过)(?=$|[\s，,。！!])/ },
   { plan: /面试|求职/, reply: /面试|录用|offer/i },
   { plan: /答辩|论文/, reply: /答辩|论文/ },
   { plan: /跑步|马拉松|长跑/, reply: /跑|马拉松/ },
@@ -20,7 +20,11 @@ export function locallyAnsweredPlans(plans: Plan[], reply: string): string[] {
   return plans.filter((plan) => {
     if (plans.length === 1 && generic.test(reply.trim())) return true;
     const domain = domains.find((item) => item.plan.test(plan.content));
-    if (domain) return domain.reply.test(reply) || (plans.length === 1 && /结果|通过|过了|没过/.test(reply));
+    if (domain) {
+      // 「面试没通过」不能因“没通过”而关闭考试；无明确领域的简短结果只用于唯一计划。
+      if (!domain.plan.test(reply) && domains.some((other) => other !== domain && other.plan.test(reply))) return false;
+      return domain.reply.test(reply) || (plans.length === 1 && (domain.shortResult?.test(reply.trim()) || /结果|通过|过了|没过/.test(reply)));
+    }
     const grams = new Set((plan.content.match(/[\p{L}\p{N}]+/gu) ?? []).flatMap((word) => Array.from({ length: Math.max(0, word.length - 1) }, (_, i) => word.slice(i, i + 2))));
     return [...grams].filter((gram) => reply.includes(gram) && !["计划", "准备", "明天", "下周", "完成"].includes(gram)).length >= 2;
   }).map((plan) => plan.id);
