@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { POST } from "@/app/api/letters/[id]/route";
 import { getFinalizeStatus, startFinalize } from "@/lib/jobs";
 import { extractEntry } from "@/lib/memory/extract";
+import { judgeReply } from "@/lib/letters/reply";
 const f = vi.hoisted(() => ({ fixture: undefined as unknown as ReturnType<typeof testDatabase> }));
 vi.mock("@/lib/db", async () => {
   const { testDatabase } = await import("./helpers/database"); f.fixture = testDatabase("letter-reply");
@@ -14,12 +15,18 @@ vi.mock("@/lib/memory/extract", async (original) => {
   return { ...actual, extractEntry: vi.fn(actual.extractEntry) };
 });
 const realExtract = vi.mocked(extractEntry).getMockImplementation()!;
+vi.mock("@/lib/letters/reply", async (original) => {
+  const actual = await original<typeof import("@/lib/letters/reply")>();
+  return { ...actual, judgeReply: vi.fn(actual.judgeReply) };
+});
+const realJudge = vi.mocked(judgeReply).getMockImplementation()!;
 beforeAll(() => f.fixture.setup(), 30_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.stubEnv("CHAT_API_KEY", ""); vi.stubEnv("EMBED_MODE", "lite");
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.mocked(extractEntry).mockReset().mockImplementation(realExtract);
-  await db.$transaction([db.job.deleteMany(), db.letter.deleteMany(), db.entry.deleteMany(), db.memory.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany()]);
+  vi.mocked(judgeReply).mockReset().mockImplementation(realJudge);
+  await db.$transaction([db.job.deleteMany(), db.letter.deleteMany(), db.entry.deleteMany(), db.memory.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany(), db.setting.deleteMany(), db.monthlyRecap.deleteMany()]);
 });
 afterAll(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await f.fixture.cleanup(); });
 const reply = (id: string, text: string) => POST(new Request("http://test/letter", { method: "POST", body: JSON.stringify({ action: "reply", reply: text }) }), { params: Promise.resolve({ id }) });
@@ -70,4 +77,24 @@ it("抽取失败有持久任务状态，可从同一回信记录重试", async (
   const { run } = await startFinalize(saved.replyEntryId); await run.done;
   expect((await getFinalizeStatus(saved.replyEntryId)).status).toBe("completed");
   expect(await db.entry.count()).toBe(1); expect(await db.job.count()).toBe(1);
+});
+it.each(["edited", "retracted", "revision"] as const)("判断期间%s，不用旧结果关闭计划", async (change) => {
+  const { plans, letter } = await setup();
+  vi.mocked(judgeReply).mockImplementationOnce(async (...args) => {
+    const answered = await realJudge(...args);
+    await db.memory.update({ where: { id: plans[0].id }, data: change === "edited" ? { userEdited: true } : change === "retracted" ? { status: "retracted" } : { revision: 1 } });
+    return answered;
+  });
+  const saved = await (await reply(letter.id, "考完了，过了！")).json();
+  expect(saved.resolvedPlanIds).toEqual([]);
+  expect((await db.memory.findUniqueOrThrow({ where: { id: plans[0].id } })).resolved).toBe(false);
+  expect((await settled(saved.replyEntryId)).status).toBe("completed");
+});
+it("人工编辑过的有效计划不交给后台自动关闭", async () => {
+  const { plans, letter } = await setup();
+  await db.memory.update({ where: { id: plans[0].id }, data: { userEdited: true, revision: 1 } });
+  const saved = await (await reply(letter.id, "考完了，过了！")).json();
+  expect(vi.mocked(judgeReply).mock.calls[0][0]).toEqual([]);
+  expect(saved.resolvedPlanIds).toEqual([]);
+  await settled(saved.replyEntryId);
 });

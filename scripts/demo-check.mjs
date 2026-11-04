@@ -10,11 +10,12 @@ export class DemoCheckError extends Error {
 }
 const check = (condition, route, code) => { if (!condition) throw new DemoCheckError(route, code); };
 export function parseArgs(args) {
-  const options = { baseUrl: "http://localhost:3000", runs: 1, yes: false, real: false, help: false };
+  const options = { baseUrl: "http://localhost:3000", runs: 1, yes: false, real: false, realAll: false, help: false };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--yes") options.yes = true;
     else if (arg === "--real") options.real = true;
+    else if (arg === "--real-all") { options.real = true; options.realAll = true; }
     else if (arg === "--help") options.help = true;
     else if (arg === "--runs") { const value = args[++i]; check(/^\d+$/.test(value ?? ""), "CLI", "INVALID_RUNS"); options.runs = Number(value); }
     else if (arg === "--base-url") options.baseUrl = args[++i] ?? "";
@@ -102,13 +103,18 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
     const started = Date.now(); let modes = [];
     try {
       const before = observe ? await diagnostics() : { recent: [] }; const direct = [];
-      const record = (execution) => { check(execution && MODES.includes(execution.mode), route, "MISSING_EXECUTION"); direct.push(execution); };
+      const record = (execution, role = "chat") => { check(execution && MODES.includes(execution.mode), route, "MISSING_EXECUTION"); direct.push({ ...execution, role }); };
       const value = await work(record); const after = observe ? await diagnostics() : { recent: [] };
       const calls = newCalls(before.recent, after.recent, route);
       if (requireAI) check(calls.length > 0, route, "MISSING_AI_TELEMETRY");
       modes = [...new Set([...calls, ...direct].map(call => call.mode))];
       check(modes.every(mode => MODES.includes(mode)), route, "INVALID_EXECUTION_MODE");
-      if (options.real) check([...calls, ...direct].every(call => call.mode === "remote" && !call.fallbackReason), route, "REAL_MODE_REQUIRED");
+      // 只有明确选择本地向量才豁免；EMBED_MODE=api 但缺配置/调用降级不能冒充 lite。
+      const localEmbed = [before, after].every(state => state.capabilities?.some(c => c.role === "embed" && c.configured === false && c.model === "lite"));
+      if (options.real || options.realAll) check([...calls, ...direct].every(call =>
+        (call.mode === "remote" && !call.fallbackReason) ||
+        (!options.realAll && localEmbed && call.role === "embed" && call.model === "lite" && call.mode === "mock" && call.fallbackReason === "not_configured")
+      ), route, "REAL_MODE_REQUIRED");
       const durationMs = Date.now() - started;
       log(`[PASS] ${name} | ${durationMs}ms | AI=${modes.join("+") || "none"}`);
       results.push({ name, ok: true, durationMs, modes }); return value;
@@ -121,15 +127,15 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
   }
   const finalized = (state, route, record) => {
     check(state.status === "completed" && state.result?.entry?.interviewDone && state.result?.card && state.result?.memories?.length, route, "FINALIZE_INCOMPLETE");
-    for (const stage of AI_STAGES) record(state.result.executions?.[stage]);
+    for (const stage of AI_STAGES) record(state.result.executions?.[stage], stage === "embed" ? "embed" : "chat");
   };
   const postmanExecutions = (result, record) => {
     check(Array.isArray(result.decisions) && result.decisions.every(d => d.outcome !== "failed" && d.outcome !== "selected"), "/api/postman", "POSTMAN_INCOMPLETE");
-    for (const decision of result.decisions) for (const stage of decision.stages ?? []) if (stage.execution) record(stage.execution);
+    for (const decision of result.decisions) for (const stage of decision.stages ?? []) if (stage.execution) record(stage.execution, stage.name === "retrieve" ? "embed" : "chat");
   };
   let failed = false;
   for (let run = 1; run <= options.runs; run++) {
-    log(`Run ${run}/${options.runs} (${options.real ? "real" : "mock/fallback allowed"})`);
+    log(`Run ${run}/${options.runs} (${options.realAll ? "real-all" : options.real ? "real (local lite allowed)" : "mock/fallback allowed"})`);
     let touched = false, runFailed = false;
     try {
       const snapshot = await step("载入示例人生", "/api/demo", async () => {
@@ -207,7 +213,7 @@ export async function main(args = process.argv.slice(2), dependencies = {}) {
   try {
     const options = parseArgs(args);
     if (options.help || !options.yes) {
-      log("此脚本会清空目标服务器数据并重新载入示例人生；每轮都会重置，结束后保留验收数据。必须带 --yes 才执行。\n先启动服务器，再运行：npm run demo:check -- --yes --base-url http://localhost:3001 --runs 2\n--runs 3 连续三轮；--real 要求所有AI步骤remote（包括向量），Mock/降级均失败。默认服务器：http://localhost:3000。失败仍尝试恢复时钟；不会打印正文、提示词或Key。");
+      log("此脚本会清空目标服务器数据并重新载入示例人生；每轮都会重置，结束后保留验收数据。必须带 --yes 才执行。\n先启动服务器，再运行：npm run demo:check -- --yes --base-url http://localhost:3001 --runs 2\n--runs 3 连续三轮；--real 要求聊天类调用（追问/抽取/画像/故事/写信/核查/回信判断/月度回忆）全部remote，允许主动选择本地lite向量；远程向量缺配置或降级仍失败。\n--real-all 要求全部AI调用remote（包括向量），Mock/降级均失败；同时传入时以--real-all为准。默认服务器：http://localhost:3000。失败仍尝试恢复时钟；不会打印正文、提示词或Key。");
       return 0;
     }
     return (await runDemoCheck(options, dependencies)).ok ? 0 : 1;

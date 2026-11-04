@@ -6,6 +6,7 @@ import { chat, chatStream } from "@/lib/ai/provider";
 import { chatJson } from "@/lib/ai/json";
 import { recordAiExecution, recentAiCalls, withAiPurpose } from "@/lib/ai/telemetry";
 import { synthesizeSpeech } from "@/lib/ai/speech";
+import { observeJsonExecution } from "@/lib/ai/execution";
 const f = vi.hoisted(() => ({ entries: vi.fn(), jobs: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { entry: { count: f.entries }, memory: { count: async () => 8 }, letter: { count: async () => 6 }, job: { count: f.jobs }, setting: { findUnique: async () => ({ value: String(7 * 86_400_000) }) } } }));
 const globals = globalThis as unknown as { aiRecentCalls: unknown[]; diagnosticsPingAt: Map<string, number> };
@@ -47,6 +48,44 @@ it("官方chat思考开关与实际发送一致，lite不谎报远程向量已�
   vi.stubEnv("EMBED_API_KEY", "test-only-placeholder"); vi.stubEnv("EMBED_BASE_URL", "https://embed.example/v1"); vi.stubEnv("EMBED_MODEL", "embed-model");
   const value = await (await GET()).json(); expect(value.capabilities[0]).toMatchObject({ configured: true, model: "deepseek-flash", host: "api.deepseek.com", thinking: "on" });
   expect(value.capabilities[2]).toMatchObject({ configured: false, model: "lite" });
+});
+it.each([
+  ["https://api.deepseek.com", "enabled", "test-only-placeholder", "on"],
+  ["https://api.deepseek.com", "false", "test-only-placeholder", "off"],
+  ["https://compatible.example/v1", "on", "test-only-placeholder", "off"],
+  ["https://api.deepseek.com", "on", "", "off"],
+])("thinking体检与实际请求一致：%s / %s / configured=%s", async (base, thinking, key, expected) => {
+  vi.stubEnv("CHAT_BASE_URL", base); vi.stubEnv("CHAT_THINKING", thinking); vi.stubEnv("CHAT_API_KEY", key);
+  const value = await (await GET()).json(); expect(value.capabilities[0].thinking).toBe(expected);
+  await chat([], { mock: () => "local" });
+  if (!key) expect(fetch).not.toHaveBeenCalled();
+  else {
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    if (base.includes("compatible")) expect(body).not.toHaveProperty("thinking");
+    else expect(body.thinking.type).toBe(expected === "on" ? "enabled" : "disabled");
+  }
+});
+it("思考模式网络重试再修复截断JSON：execution、画像观察器与体检都只记录最终一次", async () => {
+  vi.stubEnv("CHAT_API_KEY", "test-only-placeholder"); vi.stubEnv("CHAT_THINKING", "on");
+  vi.stubEnv("CHAT_THINKING_BUDGET_TOKENS", "6000");
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(new Response(null, { status: 429 }))
+    .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"title":"half', reasoning_content: "private reasoning" }, finish_reason: "length" }] }))
+    .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '{"title":"done"}' }, finish_reason: "stop" }] }));
+  const onExecution = vi.fn(), observed = vi.fn();
+  const pending = observeJsonExecution(observed, () => withAiPurpose("profile", () => chatJson(z.object({ title: z.string() }), [], { maxTokens: 300, mock: () => ({ title: "local" }), onExecution })));
+  await vi.runAllTimersAsync();
+  const result = await pending;
+  expect(result).toEqual({ title: "done" });
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(onExecution).toHaveBeenCalledTimes(1);
+  expect(observed).toHaveBeenCalledExactlyOnceWith(onExecution.mock.calls[0][0]);
+  expect(recentAiCalls()).toHaveLength(1);
+  expect(recentAiCalls()[0]).toMatchObject({ role: "chat", purpose: "profile", mode: "remote" });
+  const diagnostics = await (await GET()).json();
+  expect(diagnostics.summary).toEqual({ remote: 1, mock: 0, fallback: 0 });
+  expect(JSON.stringify(diagnostics)).not.toContain("private reasoning");
+  for (const [, init] of vi.mocked(fetch).mock.calls) expect(JSON.parse(String(init?.body))).toMatchObject({ thinking: { type: "enabled" }, max_tokens: 6300 });
 });
 it("缓冲最多30条，倒序返回，summary只统计窗口，外部修改不影响缓冲", async () => {
   for (let i = 0; i < 42; i++) { vi.advanceTimersByTime(1); recordAiExecution("chat", { mode: i < 12 ? "remote" : i < 32 ? "mock" : "fallback", durationMs: i }, "test"); }

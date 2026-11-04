@@ -11,6 +11,7 @@ import { refreshProfile } from "@/lib/memory/profile";
 import { generateStoryCard } from "@/lib/story";
 import { startFinalize } from "@/lib/jobs";
 import { tryStartInterview } from "@/lib/entry-work";
+import { getDerivedRevision, PROFILE_REVISION_KEY } from "@/lib/memory/consistency";
 import type { Extraction, FinalizeResult, FinalizeStatusResponse } from "@/lib/types";
 
 const fixture = vi.hoisted(() => ({ client: undefined as unknown as PrismaClient, directory: "", url: "" }));
@@ -49,7 +50,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   vi.stubEnv("CHAT_API_KEY", ""); vi.stubEnv("EMBED_MODE", "lite");
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  await db.$transaction([db.job.deleteMany(), db.entry.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany()]);
+  await db.$transaction([db.job.deleteMany(), db.entry.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany(), db.monthlyRecap.deleteMany(), db.setting.deleteMany()]);
 });
 afterAll(async () => {
   vi.unstubAllEnvs(); vi.restoreAllMocks();
@@ -127,6 +128,8 @@ describe("finalize with isolated SQLite", () => {
     const first = await jsonPost(entry.id);
     expect((await get(entry.id)).status).toBe("partial");
     expect(first.memories.length).toBeGreaterThan(0);
+    expect(await getDerivedRevision(db)).toBe(1);
+    await db.monthlyRecap.create({ data: { month: "2026-10", payload: "{}" } });
     if (stage === "story") expect(first.card).toBeNull();
     const remembered = first.memories[0];
     await db.memory.update({ where: { id: remembered.id }, data: { content: "用户后来纠正的记忆", userEdited: true } });
@@ -138,6 +141,9 @@ describe("finalize with isolated SQLite", () => {
     expect(embed).toHaveBeenCalledTimes(1);
     expect(refreshProfile).toHaveBeenCalledTimes(stage === "profile" ? 2 : 1);
     expect(generateStoryCard).toHaveBeenCalledTimes(stage === "story" ? 2 : 1);
+    expect(await getDerivedRevision(db)).toBe(1);
+    expect(await db.monthlyRecap.count()).toBe(1);
+    expect((await db.setting.findUniqueOrThrow({ where: { key: PROFILE_REVISION_KEY } })).value).toBe("1");
   });
   it("embed失败后复用提取检查点，SSE失败终态和GET一致", async () => {
     const entry = await create();
@@ -162,6 +168,7 @@ describe("finalize with isolated SQLite", () => {
     expect(extractEntry).not.toHaveBeenCalled();
     expect(embed).not.toHaveBeenCalled();
     expect(generateStoryCard).not.toHaveBeenCalled();
+    expect(await getDerivedRevision(db)).toBe(0);
   });
   it("保存后遗忘全部记忆再重试，不会重新创建", async () => {
     const entry = await create();
@@ -175,10 +182,14 @@ describe("finalize with isolated SQLite", () => {
   });
   it("persist检查点写入失败时，记忆和Entry终态一起回滚", async () => {
     const entry = await create();
+    await db.monthlyRecap.create({ data: { month: "2026-10", payload: "{}" } });
     const extraction: Extraction = { title: "测试", summary: "测试", mood: 0, emotions: [], memories: [{ kind: "event", content: "测试记忆", importance: 5, entities: [] }] };
     await expect(persistEntry(entry.id, extraction, [Float32Array.of(1, 0)], async () => { throw new Error("checkpoint write failed"); })).rejects.toThrow("checkpoint write failed");
     expect(await db.memory.count()).toBe(0);
     expect((await db.entry.findUniqueOrThrow({ where: { id: entry.id } })).interviewDone).toBe(false);
+    expect(await getDerivedRevision(db)).toBe(0);
+    expect(await db.setting.findUnique({ where: { key: PROFILE_REVISION_KEY } })).toBeNull();
+    expect(await db.monthlyRecap.count()).toBe(1);
   });
   it("故事删旧建新和检查点同事务，失败保留原卡片", async () => {
     const entry = await create();
@@ -245,11 +256,26 @@ describe("finalize with isolated SQLite", () => {
     expect((await retry.run.done).status).toBe("completed");
     expect(generateStoryCard).toHaveBeenCalledTimes(2);
   });
-  it("新记忆只清掉所在月份的回忆缓存", async () => {
+  it("新记忆原子清空派生缓存并递增一次，画像重建完成，重复POST不再失效", async () => {
     const entry = await create();
     await db.monthlyRecap.createMany({ data: [{ month: "2026-11", payload: "{}" }, { month: "2026-10", payload: "{}" }] });
     await jsonPost(entry.id);
-    expect((await db.monthlyRecap.findMany()).map((r) => r.month)).toEqual(["2026-10"]);
+    expect(await db.monthlyRecap.count()).toBe(0);
+    expect(await getDerivedRevision(db)).toBe(1);
+    expect((await db.setting.findUniqueOrThrow({ where: { key: PROFILE_REVISION_KEY } })).value).toBe("1");
+    expect((await get(entry.id)).stages.find((s) => s.stage === "profile")?.status).toBe("completed");
+    await db.monthlyRecap.create({ data: { month: "2026-10", payload: "{}" } });
+    await jsonPost(entry.id);
+    expect(await getDerivedRevision(db)).toBe(1);
+    expect(await db.monthlyRecap.count()).toBe(1);
+  });
+  it("派生版本异常时保存整体回滚，不留下记忆或完成标记", async () => {
+    const entry = await create();
+    await db.setting.create({ data: { key: "memory.derivedRevision", value: "corrupted" } });
+    await jsonPost(entry.id);
+    expect((await get(entry.id)).error?.stage).toBe("persist");
+    expect(await db.memory.count()).toBe(0);
+    expect((await db.entry.findUniqueOrThrow({ where: { id: entry.id } })).interviewDone).toBe(false);
   });
   it("撤回后，已完成任务的结果和恢复页都不再列出这条记忆", async () => {
     const entry = await create();
