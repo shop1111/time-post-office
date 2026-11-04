@@ -1,5 +1,6 @@
 "use client";
 
+import { XiaojuImage } from "@/components/XiaojuImage";
 import { motion } from "framer-motion";
 import { Check, CornerDownRight, Loader2, X } from "lucide-react";
 import { ExecutionBadge, fmtDuration } from "@/components/ExecutionBadge";
@@ -45,6 +46,7 @@ export function FinalizeProgress({
     <div className="card p-5">
       <div className="flex items-baseline justify-between gap-3" role="status" aria-live="polite">
         <h2 className="font-hand text-xl">{reconnecting ? "连接断了，正在查询进度…" : HEAD[phase]}</h2>
+        {phase === "running" && <XiaojuImage scene="organize" className="h-16 w-16 self-center sm:h-20 sm:w-20" />}
         {settled && total > 0 && <span className="shrink-0 text-xs text-ink-3">共 {fmtDuration(total)}</span>}
       </div>
       {reused && <p className="mt-1 text-xs text-ink-3">接着上次的进度：已完成的步骤直接沿用，记忆不会重复保存。</p>}

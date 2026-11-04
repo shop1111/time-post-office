@@ -1,4 +1,5 @@
 /** 邮政视觉元素：邮票、邮戳 */
+import { XiaojuImage } from "@/components/XiaojuImage";
 import { cn } from "@/lib/utils";
 
 /** 邮票样式按「谁写的信」区分；kind 是收件人类型 */
@@ -26,11 +27,16 @@ function stampKey({ sender, kind }: LetterParty) {
 }
 
 export function Stamp({ party, className }: { party: LetterParty; className?: string }) {
-  const s = STAMP[stampKey(party)];
+  const key = stampKey(party);
+  const s = STAMP[key];
   return (
     <div className={cn("stamp-edge shrink-0", className)} style={{ width: 54, height: 64 }}>
       <div className="flex h-full w-full flex-col items-center justify-center rounded-[2px] text-white" style={{ background: s.bg }}>
-        <span className="text-xl leading-none">{s.icon}</span>
+        {key === "curator" ? (
+          <XiaojuImage scene="incoming" className="size-9 overflow-hidden rounded-sm bg-paper" />
+        ) : (
+          <span className="text-xl leading-none">{s.icon}</span>
+        )}
         <span className="mt-1 text-[9px] tracking-widest opacity-90">{s.label}</span>
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { XiaojuImage } from "@/components/XiaojuImage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -333,7 +334,10 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
       <div className="mt-5 space-y-4">
         {msgs.map((m, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-            <div className="max-w-[85%]">
+            {m.role === "assistant" && msgs[i - 1]?.role !== "assistant" && (
+              <XiaojuImage scene="listen" className="mr-2 size-9 overflow-hidden rounded-xl border border-line bg-paper-2" />
+            )}
+            <div className="min-w-0 max-w-[85%]">
               {m.role === "assistant" && m.related && m.related.length > 0 && <RecallChips items={m.related} weights={m.weights} />}
               {(m.content || !m.failed) && (
                 <div
