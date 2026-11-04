@@ -31,8 +31,6 @@ model Entry {
   messages      EntryMessage[]
   memories      Memory[]
   cards         StoryCard[]
-  conversation  XiaojuConversation?
-  insights      XiaojuInsight[]
 
   @@index([occurredAt])
 }
@@ -186,52 +184,4 @@ model Job {
   updatedAt    DateTime @updatedAt
 
   @@index([kind, targetId])
-}
-
-/// 仅创建胶囊期间开放；保存后不可重新开启。
-model XiaojuConversation {
-  id           String   @id @default(cuid())
-  entryId      String   @unique
-  entry        Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  status       String   @default("offered") // offered | active | ended | skipped
-  revision     Int      @default(0)
-  state        String   @default("{}")
-  activeTurnId String?
-  leaseUntil   DateTime?
-  reflectedAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  turns        XiaojuTurn[]
-}
-
-model XiaojuTurn {
-  id             String   @id @default(cuid())
-  conversationId String
-  conversation   XiaojuConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  requestId      String
-  userText       String   @default("")
-  status         String   @default("running") // running | completed | failed | cancelled
-  attempt        Int      @default(1)
-  plan           String?
-  response       String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([conversationId, requestId])
-}
-
-/// 有证据的交流偏好/会话反思；推测仅候选，不自动作为事实。
-model XiaojuInsight {
-  id         String   @id @default(cuid())
-  entryId    String
-  entry      Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  kind       String // preference | reflection
-  content    String
-  quote      String
-  status     String   @default("candidate") // candidate | active | retracted
-  sourceRefs String   @default("[]") // memory id + revision; empty sources are not used across conversations
-  createdAt  DateTime @default(now())
-
-  @@index([status, kind])
-  @@unique([entryId, kind, quote])
 }

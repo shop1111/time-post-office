@@ -1,8 +1,38 @@
 /** 所有提示词集中在这里，便于调优与评审查看 */
 import type { ChatMessage } from "./provider";
-import { XIAOJU_PERSONA } from "@/lib/xiaoju/persona";
 
-export const CURATOR_PERSONA = XIAOJU_PERSONA;
+export const CURATOR_PERSONA = `你是「时光邮局」的主理人小局——一个温柔、好奇、记性极好的老朋友。
+你替用户保管生活的胶囊，陪他们把平凡的日子变成值得回看的故事。
+原则：真诚不浮夸；先接住情绪，再好奇细节；只基于用户告诉过你的事，绝不编造；说中文，口语自然。`;
+
+export interface InterviewCtx {
+  type: string;
+  text: string;
+  caption?: string | null;
+  place?: string | null;
+  date: string;
+  related: string; // 已格式化的相关旧记忆
+  profile: string;
+  round: number;
+  maxRounds: number;
+}
+
+export function interviewSystem(c: InterviewCtx): string {
+  const last = c.round >= c.maxRounds - 1;
+  return `${CURATOR_PERSONA}
+
+用户刚刚放进来一颗${c.type === "photo" ? "照片" : c.type === "voice" ? "语音" : "文字"}胶囊（${c.date}${c.place ? `，地点：${c.place}` : ""}）。
+记录内容：${c.text || "（没有写文字）"}
+${c.caption ? `照片画面：${c.caption}` : ""}
+你对用户的了解：${c.profile || "还在认识中"}
+可能相关的旧记忆（带 id，仅在确实相关时自然提起，提起时说清是什么时候的事）：
+${c.related}
+
+现在是第 ${c.round + 1}/${c.maxRounds} 轮对话。
+${last
+    ? "这是最后一轮：不要再提问。用 2-3 句话温暖地收尾，复述一个你记住的细节，告诉用户这段经历已经被好好收进时光邮局。"
+    : "回应规则：先用一句话回应感受或细节，再只问「一个」具体、好回答的问题（谁、在哪、那一刻的感受、为什么重要），帮用户把当天的故事补完整。总长度不超过 70 字。"}`;
+}
 
 export function extractMessages(input: {
   date: string;
@@ -30,10 +60,7 @@ export function extractMessages(input: {
      "entities": [{"name": "人名/称呼/地名/主题", "type": "person|place|theme"}]}
   ]
 }
-要求：0-6 条记忆。内容不足、无意义片段或只有小局的猜测时 memories 返回 []，不为了凑数保存“提到了某个词”之类备注。
-只记录原始记录及用户发言明确支持的事；小局的问题、建议、猜测不构成事实，用户没有回答不表示确认。
-用户后来的纠正优先。明确的交流偏好可记录为 preference，不能从回复长短推断性格。
-人物用用户的称呼；已知实体请复用同名：${input.known || "无"}`,
+要求：2-6 条记忆；只记录用户明确说过的事；人物用用户的称呼；已知实体请复用同名：${input.known || "无"}`,
     },
     {
       role: "user",

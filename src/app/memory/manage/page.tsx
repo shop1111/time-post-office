@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { db, parseJson } from "@/lib/db";
-import { sourceRefs, sourcesValid } from "@/lib/xiaoju/memory";
+import { db } from "@/lib/db";
 import { MemoryList } from "@/components/memory/MemoryList";
-import { CommunicationPreferences } from "@/components/memory/CommunicationPreferences";
 
 export default async function ManageMemoryPage() {
-  const insights = await db.xiaojuInsight.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
   const memories = await db.memory.findMany({
     orderBy: { occurredAt: "desc" },
     include: { entities: { include: { entity: true } } },
   });
-  const versions = new Map(memories.filter((m) => m.status === "active").map((m) => [m.id, m.revision]));
 
   return (
     <div className="space-y-6">
@@ -25,7 +21,6 @@ export default async function ManageMemoryPage() {
         </p>
       </header>
 
-      <CommunicationPreferences items={insights.map(({ id, entryId, kind, content, quote, status, sourceRefs: refs }) => ({ id, entryId, kind, content, quote, status: status === "active" && !sourcesValid(sourceRefs(parseJson(refs, [])), versions) ? "expired" : status }))} />
       <MemoryList
         items={memories.map((m) => ({
           id: m.id,
