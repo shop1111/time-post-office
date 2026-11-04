@@ -64,9 +64,9 @@ export default async function Settings() {
       <section className="card p-5 text-sm text-ink-2">
         <h2 className="font-hand text-xl text-ink">演示小贴士</h2>
         <ol className="mt-2 list-decimal space-y-1 pl-5 leading-7">
-          <li>载入示例人生后回到首页，邮差会注意到最近一周情绪低落，送来一封「未来的你」的信。</li>
+          <li>载入示例人生后回到首页，小局会注意到最近一周情绪低落，送来一封「未来的你」的信。</li>
           <li>点右上角日期打开时光机，快进 7 天：大理旅行满三个月、认证考试到期、半年前的时间胶囊都会送达。</li>
-          <li>寄一张照片，体验 AI 追问与「想起了」的记忆联想。</li>
+          <li>寄一张照片，体验小局的追问与「想起了」的记忆联想。</li>
         </ol>
         <Link href="/about" className="mt-3 inline-block text-stamp underline-offset-4 hover:underline">
           查看技术架构 →

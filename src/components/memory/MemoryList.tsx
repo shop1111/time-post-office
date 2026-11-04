@@ -119,7 +119,7 @@ export function MemoryList({ items }: { items: Item[] }) {
               </label>
               <fieldset className="space-y-2" disabled={!!busy}>
                 <legend className="text-xs text-ink-2">关联人物、地点与主题</legend>
-                <p className="text-xs text-ink-3">修改内容后，请一起确认关联。邮差不会擅自推断人物关系。</p>
+                <p className="text-xs text-ink-3">修改内容后，请一起确认关联。小局不会擅自推断人物关系。</p>
                 {entities.map((entity, index) => <div className="flex gap-2" key={index}>
                   <select className="input text-sm" aria-label={`关联 ${index + 1} 类型`} value={entity.type} onChange={(event) => setEntities((current) => current.map((e, i) => i === index ? { ...e, type: event.target.value as EntityDraft["type"] } : e))}>
                     <option value="person">人物</option><option value="place">地点</option><option value="theme">主题</option>

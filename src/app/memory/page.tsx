@@ -1,32 +1,38 @@
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/memory/profile";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { MemoryGraph } from "@/components/memory/MemoryGraph";
 import { buildMemoryGraph } from "@/lib/memory/graph";
-import { MemoryList } from "@/components/memory/MemoryList";
 import { RefreshProfile } from "@/components/memory/RefreshProfile";
 
 export default async function MemoryPage() {
   const [profile, memories] = await Promise.all([
     getProfile(),
-    db.memory.findMany({ orderBy: { occurredAt: "desc" }, include: { entities: { include: { entity: true } } } }),
+    db.memory.findMany({
+      where: ACTIVE_MEMORY,
+      orderBy: { occurredAt: "desc" },
+      select: { status: true, entities: { select: { entity: { select: { id: true, name: true, type: true } } } } },
+    }),
   ]);
 
   const graph = buildMemoryGraph(profile.name, memories);
-  const activeCount = memories.filter((m) => m.status === "active").length;
   const style = profile.styleData;
 
   return (
     <div className="space-y-8">
-      <header>
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-hand text-3xl">记忆宫殿</h1>
-        <p className="mt-1 text-sm text-ink-2">记错了可以更正，不想用于长期记忆可以撤回。记忆由你掌控。</p>
-        <p className="mt-2 text-xs leading-6 text-ink-3">撤回会保留操作记录，原始日记和历史信件仍在；不等同于删除全部相关内容。</p>
+        <Link href="/memory/manage" className="btn btn-ghost text-sm">
+          记忆管理 <ArrowRight size={14} />
+        </Link>
       </header>
 
       <section className="grid gap-4 md:grid-cols-5">
         <div className="card p-5 md:col-span-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-hand text-xl">AI 眼中的你</h2>
+            <h2 className="font-hand text-xl">小局眼中的你</h2>
             <RefreshProfile stale={profile.isStale} />
           </div>
           {profile.isStale && <span className="chip mt-3 !bg-gold/20">画像待更新</span>}
@@ -60,28 +66,6 @@ export default async function MemoryPage() {
       <section>
         <h2 className="mb-3 font-hand text-xl">关系图谱</h2>
         <MemoryGraph data={graph} />
-      </section>
-
-      <section>
-        <h2 className="mb-3 font-hand text-xl">记忆管理 · {activeCount} 条有效记忆</h2>
-        <MemoryList
-          items={memories.map((m) => ({
-            id: m.id,
-            kind: m.kind,
-            content: m.content,
-            importance: m.importance,
-            occurredAt: m.occurredAt.toISOString(),
-            dueAt: m.dueAt?.toISOString() ?? null,
-            resolved: m.resolved,
-            entryId: m.entryId,
-            recallCount: m.recallCount,
-            userEdited: m.userEdited,
-            status: m.status,
-            revision: m.revision,
-            retractedAt: m.retractedAt?.toISOString() ?? null,
-            entities: m.entities.map((e) => ({ name: e.entity.name, type: e.entity.type as "person" | "place" | "theme" })),
-          }))}
-        />
       </section>
     </div>
   );

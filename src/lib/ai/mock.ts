@@ -110,7 +110,7 @@ export function mockLetter(c: {
     `${c.reason}。我翻了翻邮局的档案柜，${a ? `找到了${md(a.occurredAt)}的那一页：${toYou(a.content)}。` : "找到了你那时留下的一页。"}`,
     b ? `${md(b.occurredAt)}，你还记下过：${toYou(b.content)}。` : "",
     `${days > 0 ? `${days} 天过去了，` : ""}你现在再看那一天，会有不一样的感受吗？如果愿意，给我回一封信，说说现在的你。`,
-    `—— 替你保管时光的邮差`,
+    `—— 小局`,
   ]
     .filter(Boolean)
     .join("\n\n");

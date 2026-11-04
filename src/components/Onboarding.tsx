@@ -23,13 +23,13 @@ export function Onboarding() {
       <p className="mt-4 text-[15px] leading-8 text-ink-2">
         把生活寄存在这里——一张照片、一段语音、几行日记。
         <br />
-        邮差会好奇地问你那天发生了什么，慢慢记住你的故事，
+        小局会好奇地问你那天发生了什么，慢慢记住你的故事，
         <br />
         然后在未来的某一天，替<span className="text-stamp">过去的你</span>、<span className="text-post">未来的你</span>给你写一封信。
       </p>
 
       <div className="card mt-8 w-full p-5 text-left">
-        <label className="text-sm text-ink-2">邮差该怎么称呼你？</label>
+        <label className="text-sm text-ink-2">小局该怎么称呼你？</label>
         <div className="mt-2 flex gap-2">
           <input className="input" placeholder="你的名字或昵称" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveName()} />
           <button className="btn btn-primary" onClick={saveName}>

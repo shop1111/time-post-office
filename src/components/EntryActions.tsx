@@ -18,7 +18,7 @@ export function EntryActions({ id, hasCard }: { id: string; hasCard: boolean }) 
     router.refresh();
   }
   async function remove() {
-    if (!confirm("删除后，这条记录和邮差从中记住的事都会被忘掉。确定吗？")) return;
+    if (!confirm("删除后，这条记录和小局从中记住的事都会被忘掉。确定吗？")) return;
     setBusy("del");
     await fetch(`/api/entries/${id}`, { method: "DELETE" });
     router.push("/timeline");

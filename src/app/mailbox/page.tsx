@@ -39,7 +39,7 @@ export default async function Mailbox({ searchParams }: { searchParams: Promise<
         <div>
           <h1 className="font-hand text-3xl">信箱</h1>
           <p className="mt-1 text-sm text-ink-2">
-            共 {inbox.length} 封来信{unread.length > 0 ? `，${unread.length} 封未拆` : ""}。邮差会在合适的时候，替过去或未来的你写信。
+            共 {inbox.length} 封来信{unread.length > 0 ? `，${unread.length} 封未拆` : ""}。小局会在合适的时候，替过去或未来的你写信。
           </p>
         </div>
         <ForceLetter />

@@ -7,8 +7,8 @@ import { db } from "@/lib/db";
 import { now, getOffset } from "@/lib/clock";
 
 export const metadata: Metadata = {
-  title: "时光邮局 · 会记住你生活的 AI 伙伴",
-  description: "用照片、语音和日记记录生活，AI 慢慢认识你，并在未来的某一天，以过去或未来的你的口吻给你写信。",
+  title: "时光邮局 · 小局陪你记住生活",
+  description: "用照片、语音和日记记录生活，小局慢慢认识你，并在未来的某一天，以过去或未来的你的口吻给你写信。",
 };
 
 export const viewport: Viewport = {

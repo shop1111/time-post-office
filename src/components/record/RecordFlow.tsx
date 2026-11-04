@@ -267,7 +267,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                 ✉️
               </motion.div>
               <p className="mt-3 font-hand text-lg">正在投进邮筒…</p>
-              {kind === "photo" && <p className="mt-1 text-xs text-ink-3">邮差在仔细看你的照片</p>}
+              {kind === "photo" && <p className="mt-1 text-xs text-ink-3">小局在仔细看你的照片</p>}
             </motion.div>
           )}
         </AnimatePresence>
@@ -286,7 +286,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
           {kind === "voice" && <VoiceRecorder onAudio={setAudio} onTranscript={setText} />}
           <textarea
             className="input min-h-[140px] resize-y font-hand text-lg leading-8"
-            placeholder={kind === "photo" ? "想说点什么吗？（可选，不写邮差也会问你）" : kind === "voice" ? "语音转写会出现在这里，也可以手动修改" : "今天发生了什么？开心的、难过的、平平无奇的，都可以。"}
+            placeholder={kind === "photo" ? "想说点什么吗？（可选，不写小局也会问你）" : kind === "voice" ? "语音转写会出现在这里，也可以手动修改" : "今天发生了什么？开心的、难过的、平平无奇的，都可以。"}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -321,7 +321,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
         )}
         <div>
           <div className="text-xs text-ink-3">{fmtCN(new Date(when))}{place ? ` · ${place}` : ""}</div>
-          <h1 className="font-hand text-2xl">邮差想多了解一点</h1>
+          <h1 className="font-hand text-2xl">小局想多了解一点</h1>
         </div>
       </div>
       {text && <p className="mt-3 rounded-xl bg-paper-2 px-4 py-3 font-hand text-[17px] leading-8 text-ink-2">{text}</p>}
@@ -381,7 +381,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
               <textarea
                 rows={1}
                 className="max-h-32 flex-1 resize-none bg-transparent px-2 py-2 text-[15px] outline-none"
-                placeholder={streaming ? "邮差正在写…" : "回答邮差…"}
+                placeholder={streaming ? "小局正在写…" : "回答小局…"}
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 onKeyDown={(e) => {
