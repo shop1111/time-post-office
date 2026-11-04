@@ -72,7 +72,7 @@ score = 1.0·语义相似 + 0.35·0.5^(Δt/45天) + 0.45·重要度 + 0.5·实�
 远程调用有总超时、网络 / 429 / 5xx 有限退避重试、全局并发上限；失败时回退本地实现，并**如实标出降级原因**（超时、限流、Key 无效……），界面上每条 AI 结果都有「真实模型 / 本地演示 / 已降级」小标记。演示现场不怕断网。
 
 ### 5. 工程
-Next.js 15 App Router 全栈 · TypeScript strict · Prisma + SQLite · SSE 流式输出（追问 / 收进邮局 / 邮差流水线）· 可恢复的后台任务（Job 检查点，断线不中断、重试只重做失败阶段）· framer-motion 动效 · recharts · react-force-graph · html-to-image · vitest 单测 270+ 项（检索打分 / 触发器 / 邮差决策 / 任务恢复 / 核查 / 出处 / 记忆一致性 / 文件 Range / TTS 缓存 …）
+Next.js 15 App Router 全栈 · TypeScript strict · Prisma + SQLite · SSE 流式输出（追问 / 收进邮局 / 邮差流水线）· 可恢复的后台任务（Job 检查点，断线不中断、重试只重做失败阶段）· framer-motion 动效 · recharts · react-force-graph · html-to-image · vitest 单测 300+ 项（检索打分 / 触发器 / 邮差决策 / 任务恢复 / 核查 / 出处 / 记忆一致性 / 文件 Range / TTS 缓存 …）
 
 ## 快速开始
 
