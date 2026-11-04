@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/DateInput";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
@@ -66,7 +67,7 @@ export function CorrespondentForm({ today, onCreated }: { today: string; onCreat
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="那是什么时候（可选）">
-              <input type="date" className="input" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
+              <DateInput aria-label="日期" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
             </Field>
             <Field label="TA 说话的样子（可选）">
               <input className="input" placeholder="例如：话不多，爱开玩笑" value={voice} onChange={(e) => setVoice(e.target.value)} />
@@ -76,7 +77,7 @@ export function CorrespondentForm({ today, onCreated }: { today: string; onCreat
       ) : (
         <>
           <Field label="分岔点：那是哪一天">
-            <input type="date" className="input" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
+            <DateInput aria-label="日期" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
           </Field>
           <Field label="当时如果……">
             <textarea className="input min-h-[80px]" placeholder="例如：如果当时没有辞职来杭州，而是留在老家考了公务员" value={moment} onChange={(e) => setMoment(e.target.value)} />

@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/DateInput";
 import { XiaojuImage } from "@/components/XiaojuImage";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -160,7 +161,7 @@ export function LetterComposer({ today, recipients, initialTo }: { today: string
                       {p.label}
                     </button>
                   ))}
-                  <input type="date" className="input !w-auto !py-1 text-sm" min={toDateInput(tomorrow)} value={custom} onChange={(e) => setCustom(e.target.value)} aria-label="自定义送达日期" />
+                  <DateInput className="w-48 text-sm [&_.input]:py-1" min={toDateInput(tomorrow)} value={custom} onChange={(e) => setCustom(e.target.value)} aria-label="自定义送达日期" />
                   <span className="text-xs text-ink-3">（{cnDate(when)} 送达）</span>
                 </>
               ) : (

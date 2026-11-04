@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/DateInput";
 import { XiaojuImage } from "@/components/XiaojuImage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -298,7 +299,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-ink-3">
               什么时候（只能选已经发生的时间）
-              <input type="datetime-local" className="input mt-1" max={maxWhen} value={when} onChange={(e) => setWhen(e.target.value > maxWhen ? maxWhen : e.target.value)} />
+              <DateInput type="datetime-local" aria-label="记录时间" className="mt-1" max={maxWhen} value={when} onChange={(e) => setWhen(e.target.value > maxWhen ? maxWhen : e.target.value)} />
             </label>
             <label className="text-xs text-ink-3">
               在哪里（可选）
