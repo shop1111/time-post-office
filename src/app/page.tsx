@@ -1,6 +1,6 @@
 import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
-import { Camera, Mic, PenLine, ArrowRight, Package, Mail } from "lucide-react";
+import { Camera, Mic, PenLine, ArrowRight, Package, Mail, MessageCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now } from "@/lib/clock";
@@ -58,6 +58,9 @@ export default async function Home() {
               ? `有 ${unreadCount} 封信在等你拆开。`
               : "今天还没有新的信。想记下点什么，就放一颗胶囊；想对谁说点什么，就写一封信。"}
           </p>
+          <Link href="/chat" className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line bg-card px-3 py-1 text-sm text-ink-2 transition hover:text-ink">
+            <MessageCircle size={14} className="text-stamp" /> 和小局聊聊
+          </Link>
         </div>
         <div className="flex shrink-0 items-end gap-3 self-end">
           {/* 桌面端：小局的自我介绍 */}
@@ -66,7 +69,9 @@ export default async function Home() {
             <div className="mt-0.5 text-xs tracking-widest text-stamp">时光邮局局长</div>
             <div className="mt-1 text-xs text-ink-3">帮你收好每一天，也替你送每一封信</div>
           </div>
-          <XiaojuImage scene="home" className="h-24 w-20 sm:h-36 sm:w-36 md:h-44 md:w-44" />
+          <Link href="/chat" aria-label="和小局聊聊" className="transition hover:-translate-y-0.5">
+            <XiaojuImage scene="home" className="h-24 w-20 sm:h-36 sm:w-36 md:h-44 md:w-44" />
+          </Link>
         </div>
       </section>
 

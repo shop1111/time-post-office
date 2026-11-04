@@ -26,12 +26,14 @@ export function ExecutionBadge({ info, showDuration = true, className }: { info:
   const remote = info.mode === "remote";
   const fallback = info.mode === "fallback";
   const Icon = remote ? Cloud : fallback ? CloudOff : Laptop;
-  const label = remote ? (info.model ?? "真实模型") : fallback ? `已降级 · ${reasonText(info.fallbackReason)}` : info.model === "lite" ? "本地向量" : "本地演示";
+  const label = remote ? (info.model ?? "真实模型") : fallback ? `已降级 · ${reasonText(info.fallbackReason)}` : info.model === "lite" ? "本地向量" : info.model === "guard" ? "防御层" : "本地演示";
   const title = remote
     ? `由真实模型 ${info.model ?? ""} 生成`
     : fallback
       ? `远程模型没有完成（${reasonText(info.fallbackReason)}），这一步改用本地规则生成`
-      : "没有配置模型 Key，用本地规则生成（演示模式）";
+      : info.model === "guard"
+        ? "这句话被防御层拦下（注入、套设定、让小局做别的事或危机信号），没有调用模型，由小局直接回应"
+        : "没有配置模型 Key，用本地规则生成（演示模式）";
   return (
     <span
       title={title}

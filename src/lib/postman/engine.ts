@@ -6,6 +6,9 @@ import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { chatJson } from "@/lib/ai/json";
 import { letterMessages } from "@/lib/ai/prompts";
+import { CURATOR_SENDERS, loadCuratorContext, rememberSelf, renderCuratorContext } from "@/lib/curator/context";
+import { planLetter } from "@/lib/curator/planner";
+import { polishCuratorLetter } from "@/lib/curator/letters";
 import { mockCuratorLetter } from "@/lib/ai/mock";
 import { now as clockNow } from "@/lib/clock";
 import { retrieve, formatMemories, fmtDate, type RetrievedMemory } from "@/lib/memory/retrieve";
@@ -17,8 +20,6 @@ import { collectCandidates, type LetterCandidate, type Snapshot } from "./trigge
 import { factCheck, processDueReplies } from "./reply";
 
 const MIN_GAP_HOURS = 20; // 频控：小局主动来信至少间隔 20 小时
-/** 小局的信（含旧数据里的邮差来信） */
-const CURATOR_SENDERS = ["curator", "postman", "past_self", "future_self"];
 
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
   const [entries, memories, letters, entities, sent, lastCurator] = await Promise.all([
@@ -125,16 +126,17 @@ export async function writeLetter(c: LetterCandidate, now: Date) {
   }));
   const mems = [...anchorMems, ...extra.filter((e) => !c.anchorMemoryIds.includes(e.id))].slice(0, 7);
   const memText = formatMemories(mems);
+  const ctx = await loadCuratorContext(now);
+  const plan = planLetter({ type: c.type, stage: ctx.relationship.stage, seed: seedOf(c.key) });
+  const mock = () => mockCuratorLetter({ type: c.type, reason: c.reason, memories: mems, style, name: profile.name, today: now, plan, world: ctx.world });
 
-  const draft = await chatJson(
+  const raw = await chatJson(
     LetterSchema,
-    letterMessages({ reason: c.reason, today: fmtDate(now), memories: memText, profile: profile.summary, name: profile.name }),
-    {
-      temperature: 0.85,
-      maxTokens: 1400,
-      mock: () => mockCuratorLetter({ type: c.type, reason: c.reason, memories: mems, style, name: profile.name, today: now }),
-    },
+    letterMessages({ reason: c.reason, today: fmtDate(now), memories: memText, profile: profile.summary, name: profile.name, curator: renderCuratorContext(ctx, profile.name, { letters: true }), plan }),
+    { temperature: 0.9, maxTokens: 1400, mock },
   );
+  // 去 AI 腔 + 输出防线
+  const draft = await polishCuratorLetter(raw, mock);
 
   // 事实自检：引用必须真实存在；真实模型下再做一次「无依据说法」核查与改写
   const validIds = new Set(mems.map((m) => m.id));
@@ -142,7 +144,7 @@ export async function writeLetter(c: LetterCandidate, now: Date) {
   if (!cited.length) cited = c.anchorMemoryIds.filter((id) => validIds.has(id));
   const { body, checkStatus, checked } = await factCheck(draft.body, memText);
 
-  return db.letter.create({
+  const letter = await db.letter.create({
     data: {
       sender: "curator",
       correspondentId: curator.id,
@@ -159,4 +161,8 @@ export async function writeLetter(c: LetterCandidate, now: Date) {
       deliveredAt: now,
     },
   });
+  await rememberSelf(letter.body, "letter", letter.id);
+  return letter;
 }
+
+const seedOf = (s: string) => Array.from(s).reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
