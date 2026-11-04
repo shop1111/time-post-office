@@ -245,11 +245,11 @@ describe("finalize with isolated SQLite", () => {
     expect((await retry.run.done).status).toBe("completed");
     expect(generateStoryCard).toHaveBeenCalledTimes(2);
   });
-  it("新记忆只清掉所在月份的回忆缓存", async () => {
+  it("新记忆接入共用派生版本失效，清除旧月度缓存", async () => {
     const entry = await create();
     await db.monthlyRecap.createMany({ data: [{ month: "2026-11", payload: "{}" }, { month: "2026-10", payload: "{}" }] });
     await jsonPost(entry.id);
-    expect((await db.monthlyRecap.findMany()).map((r) => r.month)).toEqual(["2026-10"]);
+    expect((await db.monthlyRecap.findMany()).map((r) => r.month)).toEqual([]);
   });
   it("撤回后，已完成任务的结果和恢复页都不再列出这条记忆", async () => {
     const entry = await create();

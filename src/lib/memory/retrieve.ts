@@ -49,11 +49,11 @@ export async function retrieve(opts: {
   });
   if (stale.length) {
     const vecs = await embed(stale.map((r) => r.content));
-    await Promise.all(stale.map((r, i) => db.memory.update({ where: { id: r.id }, data: { embedding: toBytes(vecs[i]) } })));
-    stale.forEach((r, i) => (r.embedding = toBytes(vecs[i]) as never));
+    const saved = await Promise.all(stale.map((r, i) => db.memory.updateMany({ where: { id: r.id, revision: r.revision, ...ACTIVE_MEMORY }, data: { embedding: toBytes(vecs[i]) } })));
+    stale.forEach((r, i) => { r.embedding = saved[i].count ? toBytes(vecs[i]) as never : null; });
   }
 
-  const cands: (Candidate & { row: (typeof rows)[number] })[] = rows.map((r) => ({
+  const cands: (Candidate & { row: (typeof rows)[number] })[] = rows.filter((r) => r.embedding !== null).map((r) => ({
     id: r.id,
     content: r.content,
     importance: r.importance,

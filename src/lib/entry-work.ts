@@ -1,5 +1,11 @@
 /** 单机进程内按记录协调；globalThis 保证开发热更新也共用锁。 */
-const state = globalThis as unknown as { entryInterviews?: Map<string, Promise<void>>; entryFinalizing?: Set<string> };
+const state = globalThis as unknown as { entryInterviews?: Map<string, Promise<void>>; entryFinalizing?: Set<string>; entryClosers?: Map<string, () => void> };
+const closers = state.entryClosers ??= new Map<string, () => void>();
+export function registerInterviewCloser(id: string, close: () => void) {
+  closers.set(id, close);
+  return () => { if (closers.get(id) === close) closers.delete(id); };
+}
+export function closeInterview(id: string) { closers.get(id)?.(); }
 const interviews: Map<string, Promise<void>> = state.entryInterviews ??= new Map();
 const finalizing: Set<string> = state.entryFinalizing ??= new Set();
 

@@ -1,4 +1,3 @@
-import type { RankWeights } from "@/lib/memory/rank";
 
 export type EntryType = "photo" | "voice" | "text";
 export type MemoryKind = "event" | "fact" | "person" | "place" | "goal" | "plan" | "preference";
@@ -79,21 +78,16 @@ export interface ExecutionInfo {
 export interface ApiError { error: string; code: string; retryable: boolean }
 export interface StreamError { code: string; message: string; retryable: boolean }
 export type HeartbeatEvent = Record<string, never>;
-export interface InterviewDoneEvent { final: boolean; execution: ExecutionInfo }
+export interface InterviewDoneEvent { final: false; requestId: string }
 export type InterviewErrorEvent = StreamError;
 export interface InterviewMetaEvent {
-  round: number;
-  maxRounds: number;
-  final: boolean;
-  weights: RankWeights;
-  related: Array<{
-    id: string; content: string; date: string; score: number; entryId: string | null;
-    parts: { sim: number; recency: number; importance: number; entity: number };
-  }>;
+  requestId: string;
+  replay: boolean;
 }
 export interface InterviewEvents {
   meta: InterviewMetaEvent;
   delta: string;
+  message: string;
   done: InterviewDoneEvent;
   error: InterviewErrorEvent;
   heartbeat: HeartbeatEvent;

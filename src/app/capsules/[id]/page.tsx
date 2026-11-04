@@ -19,7 +19,7 @@ export default async function CapsulePage({ params }: { params: Promise<{ id: st
   });
   if (!entry) notFound();
   const t = await now();
-  const related = entry.summary || entry.text
+  const related = process.env.XIAOJU_DEBUG_UI === "1" && (entry.summary || entry.text)
     ? (await retrieve({ query: `${entry.summary ?? ""} ${entry.text}`, now: t, k: 4, excludeEntryId: id, touch: false, entities: entry.memories.flatMap((m) => m.entities.map((e) => e.entity.name)) })).filter(
         // 与追问时的过滤一致：只是「最近」或「重要」但内容无关的记忆不算想起
         (r) => r.parts.sim > 0.12 || r.parts.entity > 0,

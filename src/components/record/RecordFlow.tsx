@@ -7,27 +7,22 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Camera, Mic, PenLine, Send, X, Check, RotateCcw, AlertCircle } from "lucide-react";
 import { PhotoPicker, type PhotoInfo } from "./PhotoPicker";
 import { VoiceRecorder } from "./VoiceRecorder";
-import { RecallChips, type Recalled } from "./RecallChips";
 import { FinalizeProgress, STAGE_INFO } from "./FinalizeProgress";
 import { useFinalize } from "./useFinalize";
 import { StoryCard } from "@/components/StoryCard";
-import { ExecutionBadge } from "@/components/ExecutionBadge";
 import { postSSE, SSEHttpError } from "@/lib/sse";
 import { cn, fmtCN, photoUrl } from "@/lib/utils";
-import { KIND_LABEL, type ExecutionInfo, type FinalizeStatusResponse, type InterviewDoneEvent, type InterviewMetaEvent, type MemoryKind, type StreamError } from "@/lib/types";
-import type { RankWeights } from "@/lib/memory/rank";
+import { KIND_LABEL, type FinalizeStatusResponse, type MemoryKind, type StreamError } from "@/lib/types";
 
-type Stage = "compose" | "sending" | "interview" | "finalizing";
+type Stage = "compose" | "sending" | "choice" | "interview" | "finalizing";
 type Kind = "photo" | "voice" | "text";
 
 interface Msg {
   role: "user" | "assistant";
   content: string;
-  related?: Recalled[];
-  weights?: RankWeights;
-  execution?: ExecutionInfo;
-  /** 这一轮没完成：后端不会保存它和对应的用户输入，retry 是要重发的那句话 */
-  failed?: StreamError & { retry?: string };
+  /** 回复未完成，但用户输入已保存；requestId 保证重试不重复保存。 */
+  requestId?: string;
+  failed?: StreamError & { retry?: string; requestId?: string };
 }
 
 /** 刷新页面后接着上次的进度：由 /capsules/new?entry=... 的服务端页面查好传进来 */
@@ -35,10 +30,10 @@ export interface ResumeState {
   entry: { id: string; type: Kind; text: string; place: string | null; occurredAt: string; photoPath: string | null };
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   job: FinalizeStatusResponse | null;
+  conversationStatus?: string;
+  pendingTurn?: { requestId: string; userText: string } | null;
 }
 
-// 与后端追问轮数上限一致（达到上限时后端返回 INTERVIEW_LIMIT_REACHED，这里只用于刷新后的初始显示）
-const MAX_ROUNDS = 3;
 const BUSY_RETRIES = 5;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -57,16 +52,15 @@ function toLocalInput(d: Date) {
 
 export function RecordFlow({ initialType, today, resume }: { initialType: Kind; today: string; resume?: ResumeState | null }) {
   const [kind, setKind] = useState<Kind>(resume?.entry.type ?? initialType);
-  const [stage, setStage] = useState<Stage>(resume ? (resume.job ? "finalizing" : "interview") : "compose");
+  const [stage, setStage] = useState<Stage>(resume ? (resume.job || ["ended", "skipped"].includes(resume.conversationStatus ?? "") ? "finalizing" : resume.conversationStatus === "active" || resume.messages.length ? "interview" : "choice") : "compose");
   const [photo, setPhoto] = useState<PhotoInfo | null>(null);
   const [audio, setAudio] = useState<Blob | null>(null);
   const [text, setText] = useState(resume?.entry.text ?? "");
   const [place, setPlace] = useState(resume?.entry.place ?? "");
   const [when, setWhen] = useState(toLocalInput(new Date(resume?.entry.occurredAt ?? today)));
   const [entryId, setEntryId] = useState<string | null>(resume?.entry.id ?? null);
-  const [msgs, setMsgs] = useState<Msg[]>(resume?.messages ?? []);
+  const [msgs, setMsgs] = useState<Msg[]>([...(resume?.messages ?? []), ...(resume?.pendingTurn ? [{ role: "assistant" as const, content: "", failed: { code: "INTERRUPTED", retryable: true, message: "刚才的回应没有完成，你的话还在，可以重试。", retry: resume.pendingTurn.userText, requestId: resume.pendingTurn.requestId } }] : [])]);
   const [streaming, setStreaming] = useState(false);
-  const [final, setFinal] = useState(() => (resume?.messages.filter((m) => m.role === "assistant").length ?? 0) >= MAX_ROUNDS);
   const [reply, setReply] = useState("");
   const [forgotten, setForgotten] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
@@ -93,7 +87,8 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     if (!resume) return;
     const t = setTimeout(() => {
       if (resume.job) fin.resume(resume.job);
-      else if (!resume.messages.some((m) => m.role === "assistant")) ask(resume.entry.id);
+      else if (["ended", "skipped"].includes(resume.conversationStatus ?? "")) fin.start();
+      else if (resume.conversationStatus === "active" && !resume.pendingTurn && !resume.messages.length) ask(resume.entry.id, undefined, "opening");
     }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,14 +105,15 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
 
   // 新版 Chrome 的 scrollIntoView 会返回 Promise，不能直接作为 effect 的返回值，否则 React 报错并整页刷新
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [msgs, stage]);
+    if (bottom.current && (msgs.length <= 1 || bottom.current.getBoundingClientRect().top < window.innerHeight + 160)) bottom.current.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [msgs.length, stage]);
 
   const canSend = kind === "photo" ? !!photo : kind === "voice" ? !!audio || text.trim().length > 0 : text.trim().length > 0;
 
   async function send() {
     setError("");
     setStage("sending");
+    try {
     const fd = new FormData();
     fd.set("type", kind);
     fd.set("text", text);
@@ -141,10 +137,11 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     setEntryId(data.entry.id);
     // 记下这颗胶囊，刷新页面也能接着追问或看到整理进度
     window.history.replaceState(null, "", `/capsules/new?entry=${data.entry.id}`);
-    sendTimer.current = setTimeout(() => {
-      setStage("interview");
-      ask(data.entry.id);
-    }, 900);
+    setStage("choice");
+    } catch {
+      setError("暂时没能放好胶囊，输入还在，请再试一次。");
+      setStage("compose");
+    }
   }
 
   const patchLast = (patch: (m: Msg) => Partial<Msg>) =>
@@ -155,7 +152,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     });
 
   /** 跑一轮追问流；另一轮还没结束（比如刚刷新页面）时稍等再试 */
-  async function streamRound(id: string, message?: string): Promise<RoundOutcome> {
+  async function streamRound(id: string, message: string | undefined, requestId: string): Promise<RoundOutcome> {
     for (let attempt = 0; ; attempt++) {
       const ctrl = new AbortController();
       askCtrl.current = ctrl;
@@ -163,18 +160,13 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
       try {
         await postSSE(
           `/api/entries/${id}/interview`,
-          { message },
+          { message, requestId },
           (event, data) => {
-            if (event === "meta") {
-              const d = data as InterviewMetaEvent;
-              setFinal(d.final);
-              patchLast(() => ({ related: d.related, weights: d.weights }));
+            if (event === "message") {
+              patchLast(() => ({ content: data as string }));
             } else if (event === "delta") {
               patchLast((m) => ({ content: m.content + (data as string) }));
             } else if (event === "done") {
-              const d = data as InterviewDoneEvent;
-              setFinal(d.final);
-              patchLast(() => ({ execution: d.execution }));
               ended = { kind: "done" };
             } else if (event === "error") {
               ended = { kind: "failed", error: data as StreamError };
@@ -199,33 +191,32 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     }
   }
 
-  async function ask(id: string, message?: string) {
+  async function ask(id: string, message?: string, requestId = crypto.randomUUID()) {
     setError("");
-    setMsgs((m) => [...m, ...(message ? [{ role: "user" as const, content: message }] : []), { role: "assistant", content: "" }]);
+    setMsgs((m) => [...m, ...(message && !(m.at(-1)?.role === "user" && m.at(-1)?.content === message) ? [{ role: "user" as const, content: message }] : []), { role: "assistant", content: "", requestId }]);
     setStreaming(true);
-    const outcome = await streamRound(id, message);
+    const outcome = await streamRound(id, message, requestId);
     if (outcome.kind === "aborted") return;
     setStreaming(false);
     if (outcome.kind === "limit") {
       // 后端说追问已经结束：这一轮的占位和输入都没保存，直接去收进邮局
       setMsgs((m) => m.slice(0, message ? -2 : -1));
-      setFinal(true);
     } else if (outcome.kind === "failed") {
-      patchLast(() => ({ failed: { ...outcome.error, retry: message } }));
+      patchLast(() => ({ failed: { ...outcome.error, retry: message, requestId } }));
     }
   }
 
-  /** 失败的一轮后端没有保存：从界面上拿掉，避免显示一段不存在的对话 */
+  /** 只拿掉失败的助手占位，已保存的用户输入继续保留。 */
   const dropFailed = () =>
     setMsgs((m) => {
       const last = m[m.length - 1];
-      return last?.failed ? m.slice(0, last.failed.retry ? -2 : -1) : m;
+      return last?.failed ? m.slice(0, -1) : m;
     });
 
-  function retryRound(retry?: string) {
+  function retryRound(retry?: string, requestId?: string) {
     if (!entryId || streaming) return;
     dropFailed();
-    ask(entryId, retry);
+    ask(entryId, retry, requestId);
   }
 
   /** 把没发成功的话放回输入框，改一改再发 */
@@ -236,6 +227,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
 
   function finalize() {
     if (!entryId) return;
+    if (reply.trim() && !window.confirm("还有未发送的文字。结束并保存胶囊后，这些未发送的文字不会保存，仍要结束吗？")) return;
     askCtrl.current?.abort();
     setStreaming(false);
     dropFailed();
@@ -244,8 +236,11 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
   }
 
   async function forget(id: string) {
-    await fetch(`/api/memories/${id}`, { method: "DELETE" });
-    setForgotten((s) => new Set(s).add(id));
+    try {
+      const response = await fetch(`/api/memories/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("暂时未能撤回，请重试");
+      setForgotten((s) => new Set(s).add(id));
+    } catch { setError("暂时未能撤回这条记忆，请重试。"); }
   }
 
   function submitReply() {
@@ -276,7 +271,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
         </AnimatePresence>
 
         <h1 className="font-hand text-3xl">放一颗胶囊</h1>
-        <p className="mt-1 text-sm text-ink-2">记下生活里的一个瞬间。放进去以后，小局会问你几个问题，帮你把那天的故事补完整。</p>
+        <p className="mt-1 text-sm text-ink-2">记下生活里的一个瞬间。可以直接保存，也可以和小局聊聊。</p>
         <div className="mt-4 inline-flex rounded-full border border-line bg-card p-1">
           {TABS.map(({ k, label, icon: Icon }) => (
             <button key={k} onClick={() => setKind(k)} className={cn("flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm transition", kind === k ? "bg-stamp text-white" : "text-ink-2")}>
@@ -290,7 +285,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
           {kind === "voice" && <VoiceRecorder onAudio={setAudio} onTranscript={setText} />}
           <textarea
             className="input min-h-[140px] resize-y font-hand text-lg leading-8"
-            placeholder={kind === "photo" ? "想说点什么吗？（可选，不写小局也会问你）" : kind === "voice" ? "语音转写会出现在这里，也可以手动修改" : "发生了什么？开心的、难过的、平平无奇的，都可以。"}
+            placeholder={kind === "photo" ? "想给这张照片留几句话吗？（可选）" : kind === "voice" ? "语音转写会出现在这里，也可以手动修改" : "发生了什么？开心的、难过的、平平无奇的，都可以。"}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -325,16 +320,23 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
         )}
         <div>
           <div className="text-xs text-ink-3">{fmtCN(new Date(when))}{place ? ` · ${place}` : ""}</div>
-          <h1 className="font-hand text-2xl">小局想多了解一点</h1>
+          <h1 className="font-hand text-2xl">{stage === "choice" ? "胶囊原文已放好" : stage === "interview" ? "和小局聊聊" : "这颗胶囊"}</h1>
         </div>
       </div>
       {text && <p className="mt-3 rounded-xl bg-paper-2 px-4 py-3 font-hand text-[17px] leading-8 text-ink-2">{text}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-stamp">{error}</p>}
+      {stage === "choice" && <section className="mt-6 space-y-4">
+        <p className="text-sm leading-7 text-ink-2">想再聊两句，还是就这样保存？</p>
+        <div className="flex flex-wrap gap-3">
+          <button className="btn btn-primary" onClick={() => { if (entryId) { setStage("interview"); void ask(entryId, undefined, "opening"); } }}>和小局聊聊</button>
+          <button className="btn btn-ghost" onClick={finalize}>直接保存</button>
+        </div>
+      </section>}
 
       <div className="mt-5 space-y-4">
         {msgs.map((m, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
             <div className="max-w-[85%]">
-              {m.role === "assistant" && m.related && m.related.length > 0 && <RecallChips items={m.related} weights={m.weights} />}
               {(m.content || !m.failed) && (
                 <div
                   className={cn(
@@ -347,7 +349,6 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                   {m.content}
                 </div>
               )}
-              {m.execution && <ExecutionBadge info={m.execution} className="mt-1" />}
               {m.failed && (
                 <div className="mt-1.5 rounded-xl border border-stamp/30 bg-stamp-soft/60 px-3 py-2 text-sm">
                   <p className="flex items-start gap-1.5 text-stamp">
@@ -358,7 +359,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                     </span>
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <button className="btn btn-primary !px-3 !py-1 text-xs" onClick={() => retryRound(m.failed?.retry)} disabled={streaming}>
+                    <button className="btn btn-primary !px-3 !py-1 text-xs" onClick={() => retryRound(m.failed?.retry, m.failed?.requestId)} disabled={streaming}>
                       <RotateCcw size={13} /> 重试这一轮
                     </button>
                     {m.failed.retry && (
@@ -376,16 +377,11 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
 
       {stage === "interview" && (
         <div className="sticky bottom-20 mt-6 md:bottom-4">
-          {final && !streaming ? (
-            <motion.button initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onClick={finalize} className="btn btn-primary w-full !py-3 text-base">
-              📮 把这一天收进时光邮局
-            </motion.button>
-          ) : (
             <div className="card flex items-end gap-2 p-2">
               <textarea
                 rows={1}
                 className="max-h-32 flex-1 resize-none bg-transparent px-2 py-2 text-[15px] outline-none"
-                placeholder={streaming ? "小局正在写…" : "回答小局…"}
+                placeholder={streaming ? "小局正在回应…" : "想说什么都可以…"}
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 onKeyDown={(e) => {
@@ -395,14 +391,13 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                   }
                 }}
               />
-              <button className="btn btn-ghost !px-3 text-xs" onClick={finalize} disabled={streaming}>
-                就聊到这
+              <button className="btn btn-ghost !px-3 text-xs" onClick={finalize}>
+                结束并保存
               </button>
               <button className="btn btn-primary !px-3" onClick={submitReply} disabled={streaming || !reply.trim()} aria-label="发送">
                 <Send size={16} />
               </button>
             </div>
-          )}
         </div>
       )}
 
@@ -442,7 +437,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-6 space-y-6">
           <div className="card p-5">
             <div className="flex items-center justify-between">
-              <h2 className="font-hand text-xl">我记住了</h2>
+              <h2 className="font-hand text-xl">小局整理的记忆</h2>
               <div className="flex gap-1">
                 {result.extraction.emotions.map((e) => (
                   <span key={e} className="chip">
@@ -451,7 +446,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                 ))}
               </div>
             </div>
-            <p className="mt-1 text-xs text-ink-3">不想被记住的，点 × 就会忘掉。</p>
+            <p className="mt-1 text-xs text-ink-3">{result.memories.length ? "有不想保留的，可以点 × 撤回。原始记录仍在。" : "这次先保留原始记录，不勉强整理成长期记忆。"}</p>
             <ul className="mt-3 space-y-2">
               {result.memories.map((m) => (
                 <li key={m.id} className={cn("flex items-start gap-3 rounded-xl border border-line px-3 py-2 transition", forgotten.has(m.id) && "opacity-40 line-through")}>
@@ -490,7 +485,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
               查看这颗胶囊
             </Link>
             <button onClick={() => window.location.assign("/capsules/new")} className="btn btn-primary">
-              再寄一封
+              再放一颗胶囊
             </button>
           </div>
         </motion.div>

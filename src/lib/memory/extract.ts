@@ -8,8 +8,7 @@ import { extractHeuristic } from "./heuristics";
 import { toBytes } from "./embed-lite";
 import { fmtDate } from "./retrieve";
 import { refreshProfile } from "./profile";
-import { ACTIVE_MEMORY } from "./consistency";
-import { monthKey } from "@/lib/utils";
+import { ACTIVE_MEMORY, invalidateDerived } from "./consistency";
 import type { EntityType, Extraction, MemoryKind } from "@/lib/types";
 
 const KINDS = ["event", "fact", "person", "place", "goal", "plan", "preference"] as const;
@@ -30,7 +29,7 @@ export const ExtractionSchema = z.object({
         entities: z.array(z.object({ name: z.string().min(1).max(20), type: z.enum(["person", "place", "theme"]).catch("theme") })).default([]),
       }),
     )
-    .min(1)
+    .min(0)
     .max(8),
 });
 
@@ -123,8 +122,7 @@ export async function persistEntry(
       title: extraction.title, summary: extraction.summary, mood: extraction.mood,
       emotions: JSON.stringify(extraction.emotions), place: entry.place ?? extraction.place ?? null, interviewDone: true,
     } });
-    // 新记忆只影响所在月份的回忆：删掉该月缓存，下次打开按新记忆重建（画像由后续阶段刷新）
-    await tx.monthlyRecap.deleteMany({ where: { month: monthKey(entry.occurredAt) } });
+    await invalidateDerived({ memoryIds, entryId, reason: "memory_created" }, tx);
     const saved = { extraction, memoryIds };
     await checkpoint?.(tx, saved);
     return saved;

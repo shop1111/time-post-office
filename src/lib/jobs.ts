@@ -7,6 +7,8 @@ import { refreshProfile } from "@/lib/memory/profile";
 import { generateStoryCard } from "@/lib/story";
 import { reserveFinalize } from "@/lib/entry-work";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
+import { endConversation } from "@/lib/xiaoju/session";
+import { reflectConversation } from "@/lib/xiaoju/reflect";
 import type { SSEWriter } from "@/lib/server-sse";
 import type { Extraction, FinalizeErrorEvent, FinalizeResult, FinalizeStage, FinalizeStageEvent, FinalizeStatusResponse, ExecutionInfo } from "@/lib/types";
 
@@ -56,8 +58,8 @@ async function save(run: Run) {
 }
 
 /** persist/story 在各自写入事务里调用，完成状态与结果不能分开提交。 */
-async function commitStage(run: Run, stage: FinalizeStage, start: number, checkpoint: Checkpoint, tx: Prisma.TransactionClient = db) {
-  const value: FinalizeStageEvent = { stage, status: "completed", durationMs: Date.now() - start, ...(checkpoint.executions[stage] ? { execution: checkpoint.executions[stage] } : {}) };
+async function commitStage(run: Run, stage: FinalizeStage, start: number, checkpoint: Checkpoint, tx: Prisma.TransactionClient = db, status: "completed" | "skipped" = "completed") {
+  const value: FinalizeStageEvent = { stage, status, durationMs: Date.now() - start, ...(checkpoint.executions[stage] ? { execution: checkpoint.executions[stage] } : {}) };
   const stages = replaceStage(run.state.stages, value);
   await tx.job.update({ where: { id: run.state.jobId }, data: { stages: JSON.stringify(stages), checkpoint: JSON.stringify(checkpoint) } });
   return stages;
@@ -119,8 +121,14 @@ async function execute(run: Run, ready: Promise<void>): Promise<FinalizeStatusRe
               committed = await commitStage(run, stage, started, next, tx);
             });
             break;
-          case "profile": await observeJsonExecution(onExecution, () => refreshProfile()); break;
+          case "profile":
+            await reflectConversation(run.entryId);
+            await observeJsonExecution(onExecution, () => refreshProfile()); break;
           case "story":
+            if (!await db.memory.count({ where: { entryId: run.entryId, ...ACTIVE_MEMORY } })) {
+              committed = await commitStage(run, stage, started, next, db, "skipped");
+              break;
+            }
             await generateStoryCard(run.entryId, { onExecution }, async (tx, card) => {
               next.cardId = card.id;
               committed = await commitStage(run, stage, started, next, tx);
@@ -213,6 +221,8 @@ export async function startFinalize(entryId: string) {
     if (current && current !== active) return { run: await current, reused: true };
     runs.delete(entryId);
   }
+  if (!await db.entry.findUnique({ where: { id: entryId }, select: { id: true } })) throw new JobRequestError(404, "ENTRY_NOT_FOUND", "找不到这颗胶囊");
+  await endConversation(entryId);
   const reservation = reserveFinalize(entryId);
   const pending = open(entryId, reservation.wait);
   runs.set(entryId, pending);
