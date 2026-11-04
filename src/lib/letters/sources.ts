@@ -1,4 +1,5 @@
 import { db, parseJson } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { z } from "zod";
 import type { CheckStatus, LetterSource, LetterSourcesResponse } from "@/lib/types";
 
@@ -44,21 +45,22 @@ export async function letterSources(letterId: string): Promise<LetterSourcesResp
   const snapshots = parsed.success ? parsed.data : [];
   let sources: LetterSource[] = [];
   if (snapshots.length) {
-    const current = await db.memory.findMany({ where: { id: { in: snapshots.map((snapshot) => snapshot.memoryId) } }, select: { id: true, content: true } });
+    const current = await db.memory.findMany({ where: { id: { in: snapshots.map((snapshot) => snapshot.memoryId) } }, select: { id: true, content: true, status: true } });
     const byId = new Map(current.map((row) => [row.id, row]));
     sources = [...new Map(snapshots.map((snapshot) => {
       const row = byId.get(snapshot.memoryId);
       return [snapshot.memoryId, { memoryId: snapshot.memoryId, entryId: snapshot.entryId, date: snapshot.occurredAt, excerpt: snapshot.content,
-        state: !row ? "withdrawn" : row.content === snapshot.content ? "current" : "corrected" } satisfies LetterSource];
+        state: !row || row.status !== "active" ? "withdrawn" : row.content === snapshot.content ? "current" : "corrected" } satisfies LetterSource];
     })).values()];
   } else if (parsed.success && !snapshots.length) {
     // 只有明确的空快照才按旧信件处理；损坏快照不冒充有效原文。
     const ids = parseJson<unknown>(letter.citedMemoryIds, []);
-    const rows = await db.memory.findMany({ where: { id: { in: Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [] } } });
+    const rows = await db.memory.findMany({ where: { id: { in: Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [] }, ...ACTIVE_MEMORY } });
     sources = rows.map((row) => ({ memoryId: row.id, entryId: row.entryId, date: row.occurredAt.toISOString(), excerpt: row.content, state: "current" }));
   }
   return {
     letterId, checkStatus: CHECK_STATUS.includes(letter.checkStatus as CheckStatus) ? letter.checkStatus as CheckStatus : "unchecked", checkNote: letter.checkNote,
-    sentences: splitLetterBody(letter.body).map((text) => ({ text, sources: sources.map((source) => ({ source, score: sourceScore(text, source.excerpt) })).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, 2).map((item) => item.source) })),
+    sentences: splitLetterBody(letter.body).map((text) => ({ text, sources: sources.map((source) => ({ source, score: sourceScore(text, source.excerpt) })).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, 2)
+      .map(({ source }) => (source.state === "withdrawn" ? { ...source, excerpt: "" } : source)) })),
   };
 }

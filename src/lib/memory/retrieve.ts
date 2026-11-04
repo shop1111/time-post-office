@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "./consistency";
 import { embed, type CallOptions } from "@/lib/ai/provider";
 import { fromBytes, toBytes } from "./embed-lite";
 import { DEFAULT_WEIGHTS, mmr, scoreCandidates, type Candidate, type RankWeights } from "./rank";
@@ -33,6 +34,7 @@ export async function retrieve(opts: {
 }): Promise<RetrievedMemory[]> {
   const rows = await db.memory.findMany({
     where: {
+      ...ACTIVE_MEMORY,
       ...(opts.before ? { occurredAt: { lt: opts.before } } : {}),
       ...(opts.before ? { OR: [{ entryId: null }, { entry: { occurredAt: { lt: opts.before } } }] } : {}),
       ...(opts.excludeEntryId ? { NOT: { entryId: opts.excludeEntryId } } : {}),

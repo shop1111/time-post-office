@@ -217,6 +217,40 @@ describe("stream lifecycle", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fallback).not.toHaveBeenCalled();
   });
+  it("思考模式：推理内容不输出，但算作有响应，不触发首包/空闲超时", async () => {
+    vi.stubEnv("CHAT_THINKING", "on");
+    const think = (text: string) => `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: text } }] })}\n\n`;
+    const enc = new TextEncoder();
+    const fetcher = fakeFetch(async () => new Response(new ReadableStream({
+      async start(c) {
+        // 推理持续 120ms，远超 50ms 的首包超时，但每 30ms 都有推理片段
+        for (let i = 0; i < 4; i++) { c.enqueue(enc.encode(think("想一想"))); await delayed(null, 30); }
+        c.enqueue(enc.encode(delta("正文") + "data: [DONE]\n\n"));
+        c.close();
+      },
+    })));
+    const onExecution = vi.fn();
+    const result = collect(chatStream(messages, { mock, onExecution, maxTokens: 300 }));
+    await vi.runAllTimersAsync();
+    expect(await result).toBe("正文");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onExecution.mock.calls[0][0].mode).toBe("remote");
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body.max_tokens).toBe(300 + 4000);
+  });
+  it("思考模式只对官方域名追加推理预算；默认 base_url 与官方文档一致", async () => {
+    vi.stubEnv("CHAT_THINKING", "on");
+    vi.stubEnv("CHAT_BASE_URL", "");
+    expect(roleConfig("chat")?.baseUrl).toBe("https://api.deepseek.com");
+    const fetcher = fakeFetch(async () => reply());
+    await chat(messages, { mock, maxTokens: 200 });
+    expect(String(fetcher.mock.calls[0][0])).toBe("https://api.deepseek.com/chat/completions");
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).max_tokens).toBe(4200);
+    vi.stubEnv("CHAT_BASE_URL", "https://compatible.example/v1");
+    await chat(messages, { mock, maxTokens: 200 });
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).max_tokens).toBe(200);
+  });
   it("提前EOF不作为成功，消费方return会释放并发槽", async () => {
     vi.stubEnv("AI_MAX_CONCURRENCY", "1");
     fakeFetch(async () => new Response(delta("半句")));
@@ -242,6 +276,30 @@ describe("JSON repair budget", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(onExecution).toHaveBeenCalledTimes(1);
     expect(onExecution.mock.calls[0][0].mode).toBe("remote");
+  });
+  it("被max_tokens截断的JSON进入修复，而不是直接降级", async () => {
+    let n = 0;
+    const fetcher = fakeFetch(async () => ++n === 1
+      ? Response.json({ choices: [{ message: { content: '{"title":"远程' }, finish_reason: "length" }] })
+      : reply('{"title":"远程标题"}'));
+    const onExecution = vi.fn();
+    expect(await chatJson(schema, messages, { mock: local, onExecution })).toEqual({ title: "远程标题" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(onExecution.mock.calls[0][0].mode).toBe("remote");
+    const repair = JSON.parse(String(fetcher.mock.calls[1][1]?.body)).messages.at(-1).content;
+    expect(repair).toContain("截断");
+  });
+  it("修复提示带上zod的约束说明", async () => {
+    const fetcher = fakeFetch(async () => reply('{"title":123}'));
+    await chatJson(schema, messages, { mock: local, retries: 1 });
+    const repair = JSON.parse(String(fetcher.mock.calls[1][1]?.body)).messages.at(-1).content;
+    expect(repair).toMatch(/title: Expected string/);
+  });
+  it("普通chat仍把截断当作失败降级", async () => {
+    fakeFetch(async () => Response.json({ choices: [{ message: { content: "半封信" }, finish_reason: "length" }] }));
+    const onExecution = vi.fn();
+    expect(await chat(messages, { mock, onExecution })).toBe(mock());
+    expect(onExecution.mock.calls[0][0]).toMatchObject({ mode: "fallback", fallbackReason: "bad_json" });
   });
   it("修复耗尽返回bad_json而不是假装remote", async () => {
     const fetcher = fakeFetch(async () => reply('{"title":123}'));

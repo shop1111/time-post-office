@@ -8,6 +8,7 @@ import { refreshProfile } from "@/lib/memory/profile";
 import { generateStoryCard } from "@/lib/story";
 import { reserveFinalize } from "@/lib/entry-work";
 import { logError } from "@/lib/errors";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import type { SSEWriter } from "@/lib/server-sse";
 import type { Extraction, FinalizeErrorEvent, FinalizeResult, FinalizeStage, FinalizeStageEvent, FinalizeStatusResponse, ExecutionInfo } from "@/lib/types";
 
@@ -64,14 +65,27 @@ async function commitStage(run: Run, stage: FinalizeStage, start: number, checkp
   return stages;
 }
 
+/** 卡片可在详情页重新生成（删旧建新），结果里总是取这条记录当前的卡片，而不是任务快照里的旧 id。 */
+async function currentCard(entryId: string): Promise<FinalizeResult["card"]> {
+  const card = await db.storyCard.findFirst({ where: { entryId }, orderBy: { createdAt: "desc" } });
+  return card ? { ...card, createdAt: card.createdAt.toISOString() } : null;
+}
+/** 已保存的任务结果会过时：卡片可能被重新生成，记忆可能被撤回。返回前按当前数据刷新这两项。 */
+async function withCurrentState(state: FinalizeStatusResponse, entryId: string): Promise<FinalizeStatusResponse> {
+  if (!state.result) return state;
+  const active = new Set((await db.memory.findMany({
+    where: { id: { in: state.result.memories.map((m) => m.id) }, ...ACTIVE_MEMORY }, select: { id: true },
+  })).map((m) => m.id));
+  return { ...state, result: { ...state.result, card: await currentCard(entryId), memories: state.result.memories.filter((m) => active.has(m.id)) } };
+}
+
 async function resultOf(run: Run): Promise<FinalizeResult> {
   const entry = await db.entry.findUniqueOrThrow({ where: { id: run.entryId } });
-  const memories = await db.memory.findMany({ where: { id: { in: run.checkpoint.memoryIds ?? [] } }, include: { entities: { include: { entity: true } } }, orderBy: { createdAt: "asc" } });
-  const card = run.checkpoint.cardId ? await db.storyCard.findUnique({ where: { id: run.checkpoint.cardId } }) : null;
+  const memories = await db.memory.findMany({ where: { id: { in: run.checkpoint.memoryIds ?? [] }, ...ACTIVE_MEMORY }, include: { entities: { include: { entity: true } } }, orderBy: { createdAt: "asc" } });
   return {
     extraction: run.checkpoint.extraction!,
     entry: { ...entry, occurredAt: entry.occurredAt.toISOString(), exifTime: entry.exifTime?.toISOString() ?? null, createdAt: entry.createdAt.toISOString() },
-    card: card ? { ...card, createdAt: card.createdAt.toISOString() } : null,
+    card: await currentCard(run.entryId),
     memories: memories.map((m) => ({ id: m.id, kind: m.kind, content: m.content, importance: m.importance, dueAt: m.dueAt?.toISOString() ?? null, entities: m.entities.map(({ entity }) => ({ name: entity.name, type: entity.type })) })),
     executions: run.checkpoint.executions,
   };
@@ -163,7 +177,12 @@ async function open(entryId: string, ready: Promise<void>): Promise<Run> {
   const job = previous ?? await db.job.create({ data: { kind: "finalize", targetId: entryId } });
   const run: Run = { entryId, reused: !!previous || entry.interviewDone, state: statusOf(job), checkpoint: parseJson(job.checkpoint, { executions: {} }), listeners: new Set(), done: Promise.resolve(statusOf(job)), settled: false };
   run.checkpoint.executions ??= {};
-  if (job.status === "completed" && run.state.result) { run.settled = true; return run; }
+  if (job.status === "completed" && run.state.result) {
+    run.state = await withCurrentState(run.state, entryId);
+    run.done = Promise.resolve(run.state);
+    run.settled = true;
+    return run;
+  }
 
   const saved = await readEntryState(entryId);
   // Entry 终态或 persist 完成检查点永远优先，哪怕所有记忆后来都被遗忘，也不重新生成。
@@ -189,11 +208,19 @@ async function open(entryId: string, ready: Promise<void>): Promise<Run> {
 /** 先同步注册同一 Promise，避免并发请求在第一个 await 前后各建一份任务。 */
 export async function startFinalize(entryId: string) {
   const active = runs.get(entryId);
-  if (active) return { run: await active, reused: true };
+  if (active) {
+    const run = await active;
+    // 还在跑、或已完成：复用。刚以失败/部分完成结束：这是一次重试，不能再把旧错误发回去。
+    if (!run.settled || run.state.status === "completed") return { run, reused: true };
+    const current = runs.get(entryId);
+    if (current && current !== active) return { run: await current, reused: true };
+    runs.delete(entryId);
+  }
   const reservation = reserveFinalize(entryId);
   const pending = open(entryId, reservation.wait);
   runs.set(entryId, pending);
-  const release = () => { if (runs.get(entryId) === pending) runs.delete(entryId); reservation.release(); };
+  // 只有仍是当前任务时才释放：被重试顶替的旧任务不能清掉新任务的占用。
+  const release = () => { if (runs.get(entryId) === pending) { runs.delete(entryId); reservation.release(); } };
   void pending.then((run) => run.done.then(release, release), release);
   const run = await pending;
   return { run, reused: run.reused };
@@ -222,5 +249,10 @@ export async function getFinalizeStatus(entryId: string): Promise<FinalizeStatus
     await db.job.updateMany({ where: { id: job.id, status: job.status, updatedAt: job.updatedAt }, data: { status: "failed", error: JSON.stringify({ code: "JOB_INTERRUPTED", message: "服务重启使任务中断，请重试以继续未完成阶段", retryable: true }) } });
     job = await db.job.findUniqueOrThrow({ where: { id: job.id } });
   }
-  return statusOf(job);
+  return withCurrentState(statusOf(job), entryId);
+}
+
+/** 删除记录时一并删除它的任务：任务检查点里有抽取结果和卡片内容，不能在记录删掉后残留。 */
+export function deleteEntryJobs(entryId: string) {
+  return db.job.deleteMany({ where: { kind: "finalize", targetId: entryId } });
 }

@@ -15,11 +15,13 @@ export interface CallOptions {
 }
 export interface ChatOptions extends CallOptions {
   temperature?: number; maxTokens?: number; json?: boolean; mock: () => string;
+  /** 返回被 max_tokens 截断的正文（由调用方修复），而不是当作失败降级。 */
+  allowTruncated?: boolean;
 }
 export function roleConfig(role: Role): RoleConfig | null {
   const p = role.toUpperCase();
   const apiKey = process.env[`${p}_API_KEY`]?.trim();
-  const baseUrl = process.env[`${p}_BASE_URL`]?.trim() || (role === "chat" ? "https://api.deepseek.com/v1" : "");
+  const baseUrl = process.env[`${p}_BASE_URL`]?.trim() || (role === "chat" ? "https://api.deepseek.com" : "");
   const model = process.env[`${p}_MODEL`]?.trim() || (role === "chat" ? "deepseek-flash" : "");
   return baseUrl && apiKey && model ? { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model } : null;
 }
@@ -32,24 +34,33 @@ export function providerStatus() {
   };
 }
 export function callTimeout(role: Role, options: CallOptions = {}) {
-  const limit = positiveEnv(`${role.toUpperCase()}_TIMEOUT_MS`, positiveEnv("AI_TIMEOUT_MS", 45_000));
+  // 思考模式先推理再作答，未显式配置时放宽默认预算。
+  const fallback = thinkingOn(roleConfig(role)) ? 120_000 : 45_000;
+  const limit = positiveEnv(`${role.toUpperCase()}_TIMEOUT_MS`, positiveEnv("AI_TIMEOUT_MS", fallback));
   return options.timeoutMs === undefined ? limit : Math.max(1, Math.min(limit, options.timeoutMs));
+}
+function isDeepSeek(cfg: RoleConfig) {
+  try { return new URL(cfg.baseUrl).hostname === "api.deepseek.com"; }
+  catch { return false; /* 无效地址在请求阶段统一降级 */ }
+}
+export function thinkingOn(cfg: RoleConfig | null) {
+  return !!cfg && isDeepSeek(cfg) && /^(on|true|1|enabled)$/i.test(process.env.CHAT_THINKING ?? "off");
 }
 function thinking(cfg: RoleConfig) {
   // 只向DeepSeek官方发送其扩展参数，其他兼容服务不受影响。
-  try {
-    if (new URL(cfg.baseUrl).hostname === "api.deepseek.com") {
-      return { thinking: { type: /^(on|true|1|enabled)$/i.test(process.env.CHAT_THINKING ?? "off") ? "enabled" : "disabled" } };
-    }
-  } catch { /* 无效地址在请求阶段统一降级 */ }
-  return {};
+  return isDeepSeek(cfg) ? { thinking: { type: thinkingOn(cfg) ? "enabled" : "disabled" } } : {};
+}
+/** 推理 token 计入 max_tokens：思考模式下在业务长度之外追加推理预算，避免正文被截断。 */
+export function maxTokensFor(cfg: RoleConfig, base: number) {
+  return thinkingOn(cfg) ? base + positiveEnv("CHAT_THINKING_BUDGET_TOKENS", 4_000) : base;
 }
 function jsonInit(cfg: RoleConfig, body: unknown): RequestInit {
   return { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` }, body: JSON.stringify(body) };
 }
-function content(data: unknown): string {
+function content(data: unknown, allowTruncated = false): string {
   const choice = (data as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }> })?.choices?.[0];
-  if (choice?.finish_reason === "length" || typeof choice?.message?.content !== "string" || !choice.message.content.trim()) throw new AiFailure("bad_json");
+  if (typeof choice?.message?.content !== "string" || !choice.message.content.trim()) throw new AiFailure("bad_json");
+  if (choice.finish_reason === "length" && !allowTruncated) throw new AiFailure("bad_json");
   return choice.message.content;
 }
 function execution(mode: ExecutionInfo["mode"], started: number, model?: string, fallbackReason?: string): ExecutionInfo {
@@ -81,9 +92,9 @@ async function run<T>(role: Role, cfg: RoleConfig | null, options: CallOptions, 
 }
 export async function chat(messages: ChatMessage[], opts: ChatOptions): Promise<string> {
   return run("chat", roleConfig("chat"), opts, (cfg, budget) => requestJson(`${cfg.baseUrl}/chat/completions`, jsonInit(cfg, {
-    model: cfg.model, messages, temperature: opts.temperature ?? 0.8, max_tokens: opts.maxTokens ?? 1200,
+    model: cfg.model, messages, temperature: opts.temperature ?? 0.8, max_tokens: maxTokensFor(cfg, opts.maxTokens ?? 1200),
     ...thinking(cfg), ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-  }), budget, content), opts.mock);
+  }), budget, (data) => content(data, opts.allowTruncated)), opts.mock);
 }
 /** 已有文字后失败：不重试、不拼接Mock，交由路由输出结构化error。 */
 export class ChatStreamError extends Error {
@@ -101,7 +112,8 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
     report(execution("mock", started, undefined, "not_configured"));
     return;
   }
-  const budget = new Budget(Math.min(opts.timeoutMs ?? Infinity, positiveEnv("AI_STREAM_TOTAL_TIMEOUT_MS", 90_000)));
+  const budget = new Budget(Math.min(opts.timeoutMs ?? Infinity, positiveEnv("AI_STREAM_TOTAL_TIMEOUT_MS", thinkingOn(cfg) ? 180_000 : 90_000)));
+  // emitted：已向用户输出正文（之后失败不能重试）；推理内容只算「还活着」，不输出给用户。
   let emitted = false;
   let failure: AiFailure | undefined;
   try {
@@ -111,11 +123,12 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
       const controller = new AbortController();
       const signal = AbortSignal.any([budget.signal, controller.signal]);
       let firstTimer: ReturnType<typeof setTimeout> | undefined;
+      let alive = false;
       try {
         release = await acquire(budget.signal);
         firstTimer = setTimeout(() => controller.abort(), positiveEnv("AI_STREAM_FIRST_TIMEOUT_MS", 15_000));
         const res = await bounded(fetch(`${cfg.baseUrl}/chat/completions`, {
-          ...jsonInit(cfg, { model: cfg.model, messages, stream: true, temperature: opts.temperature ?? 0.8, max_tokens: opts.maxTokens ?? 1200, ...thinking(cfg) }), signal,
+          ...jsonInit(cfg, { model: cfg.model, messages, stream: true, temperature: opts.temperature ?? 0.8, max_tokens: maxTokensFor(cfg, opts.maxTokens ?? 1200), ...thinking(cfg) }), signal,
         }), signal);
         assertOk(res);
         if (!res.body) throw new AiFailure("network", true);
@@ -124,7 +137,7 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
         let buf = "";
         let complete = false;
         for (;;) {
-          const idle = emitted ? setTimeout(() => controller.abort(), positiveEnv("AI_STREAM_IDLE_TIMEOUT_MS", 15_000)) : undefined;
+          const idle = alive ? setTimeout(() => controller.abort(), positiveEnv("AI_STREAM_IDLE_TIMEOUT_MS", 15_000)) : undefined;
           let chunk: ReadableStreamReadResult<Uint8Array>;
           try { chunk = await bounded(reader.read(), signal); }
           finally { clearTimeout(idle); }
@@ -135,14 +148,18 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
             if (!line.trim().startsWith("data:")) continue;
             const payload = line.trim().slice(5).trim();
             if (payload === "[DONE]") { complete = true; break; }
-            const data = JSON.parse(payload) as { error?: unknown; choices?: Array<{ delta?: { content?: unknown }; finish_reason?: string }> };
+            const data = JSON.parse(payload) as { error?: unknown; choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown }; finish_reason?: string }> };
             if (data.error) throw new AiFailure("network", true);
             const choice = data.choices?.[0];
             if (choice?.finish_reason === "length" || choice?.finish_reason === "content_filter") throw new AiFailure("bad_json");
+            const reasoning = choice?.delta?.reasoning_content;
             const delta = choice?.delta?.content;
+            if ((typeof reasoning === "string" && reasoning.length) || (typeof delta === "string" && delta.length)) {
+              alive = true;
+              clearTimeout(firstTimer);
+            }
             if (typeof delta === "string" && delta.length) {
               emitted = true;
-              clearTimeout(firstTimer);
               yield delta;
             }
           }
@@ -187,7 +204,7 @@ async function* fakeStream(text: string): AsyncGenerator<string> {
 }
 export async function describeImage(dataUrl: string, hint: string, opts: CallOptions = {}): Promise<string | null> {
   return run("vision", roleConfig("vision"), opts, (cfg, budget) => requestJson(`${cfg.baseUrl}/chat/completions`, jsonInit(cfg, {
-    model: cfg.model, max_tokens: 400, ...thinking(cfg), messages: [{ role: "user", content: [
+    model: cfg.model, max_tokens: maxTokensFor(cfg, 400), ...thinking(cfg), messages: [{ role: "user", content: [
       { type: "text", text: `请用 2-3 句中文客观描述这张生活照片：场景、人物、天气/光线、氛围与可能的地点线索。不要臆测人名。${hint ? `用户补充：${hint}` : ""}` },
       { type: "image_url", image_url: { url: dataUrl } },
     ] }],

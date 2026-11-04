@@ -1,4 +1,5 @@
 import { db, parseJson } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now } from "@/lib/clock";
 import { startFinalize } from "@/lib/jobs";
 import { judgeReply } from "@/lib/letters/reply";
@@ -21,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const reply = input.reply.trim();
     // loop:memoryId 是这封信真正追问的目标；其他引用可能只是补充背景，不能一并关闭。
     const ids = original.triggerKey?.startsWith("loop:") ? [original.triggerKey.slice(5)] : parseJson<string[]>(original.citedMemoryIds, []);
-    const plans = original.triggerType === "open_loop" ? await db.memory.findMany({ where: { id: { in: ids }, kind: "plan", resolved: false }, select: { id: true, content: true } }) : [];
+    const plans = original.triggerType === "open_loop" ? await db.memory.findMany({ where: { id: { in: ids }, kind: "plan", resolved: false, ...ACTIVE_MEMORY }, select: { id: true, content: true } }) : [];
     let execution: ExecutionInfo | undefined;
     const answered = await judgeReply(plans, reply, { onExecution: (info) => { execution = info; } });
     const saved = await db.$transaction(async (tx) => {

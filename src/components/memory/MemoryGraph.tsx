@@ -27,12 +27,15 @@ export function MemoryGraph({ data }: { data: GraphData }) {
   const fg = useRef<any>(null);
   const fitted = useRef(false);
   useEffect(() => {
+    fitted.current = false;
+  }, [data]);
+  useEffect(() => {
     const el = box.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setW(el.clientWidth));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [data.nodes.length]);
   const dark = typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   if (data.nodes.length <= 1) return <div className="card p-6 text-sm text-ink-3">记录里出现的人、地点和主题，会在这里连成一张网。</div>;

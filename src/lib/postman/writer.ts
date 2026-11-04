@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { isMock } from "@/lib/ai/provider";
 import { chatJson } from "@/lib/ai/json";
 import { letterMessages } from "@/lib/ai/prompts";
@@ -54,7 +55,7 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
     const before = c.sender === "past_self" ? writtenDayEnd(c.writtenAt) : undefined;
     const profile = before ? { name: "你", summary: "" } : await getProfile();
     const { style, desc } = before ? await historicalStyle(before) : await styleText();
-    const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds }, ...(before ? {
+    const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds }, ...ACTIVE_MEMORY, ...(before ? {
       occurredAt: { lt: before }, OR: [{ entryId: null }, { entry: { occurredAt: { lt: before } } }],
     } : {}) }, include: { entities: { include: { entity: true } } } })).sort((a, b) => c.anchorMemoryIds.indexOf(a.id) - c.anchorMemoryIds.indexOf(b.id));
     // 候选reason/query/entities也可能混入后来的信息，过去的你仅从合格锚点重建检索输入。

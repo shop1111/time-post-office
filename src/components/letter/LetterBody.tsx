@@ -14,7 +14,7 @@ const MAX_TOTAL_MS = 3200;
 const STATE_NOTE: Record<LetterSource["state"], string | null> = {
   current: null,
   corrected: "这条回忆后来被你更正过，下面是写信时的原文",
-  withdrawn: "这条回忆已被你撤回，下面是写信时的原文",
+  withdrawn: "这条回忆已被你撤回，原文不再显示",
 };
 
 interface Pop {
@@ -137,7 +137,8 @@ export function LetterBody({ sentences, reveal, reading }: { sentences: LetterSe
               {sentences[pop.i].sources.map((src) => (
                 <li key={src.memoryId}>
                   <div className="text-[11px] text-ink-3">{fmtCN(src.date)}，你写下：</div>
-                  <blockquote className="mt-1 border-l-2 border-gold/60 pl-2 font-hand text-[15px] leading-7">「{src.excerpt}」</blockquote>
+                  {/* 撤回的回忆后端不再返回原文 */}
+                  {src.excerpt && <blockquote className="mt-1 border-l-2 border-gold/60 pl-2 font-hand text-[15px] leading-7">「{src.excerpt}」</blockquote>}
                   {STATE_NOTE[src.state] && (
                     <p className={cn("mt-1 text-[11px]", src.state === "withdrawn" ? "text-stamp" : "text-gold")}>{STATE_NOTE[src.state]}</p>
                   )}

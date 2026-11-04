@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Mic, PenLine, Camera } from "lucide-react";
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now } from "@/lib/clock";
 import { StoryCard } from "@/components/StoryCard";
 import { cn, fmtCN, monthKey, moodColor, moodEmoji, photoUrl } from "@/lib/utils";
@@ -12,12 +13,12 @@ export default async function Timeline({ searchParams }: { searchParams: Promise
     db.entry.findMany({
       where: {
         occurredAt: { lte: t },
-        ...(tag ? { memories: { some: { entities: { some: { entity: { name: tag } } } } } } : {}),
+        ...(tag ? { memories: { some: { ...ACTIVE_MEMORY, entities: { some: { entity: { name: tag } } } } } } : {}),
       },
       orderBy: { occurredAt: "desc" },
       include: { cards: true },
     }),
-    db.entity.findMany({ where: { type: { in: ["person", "place"] } }, include: { _count: { select: { memories: true } } } }),
+    db.entity.findMany({ where: { type: { in: ["person", "place"] } }, include: { _count: { select: { memories: { where: { memory: ACTIVE_MEMORY } } } } } }),
   ]);
   const tags = entities.filter((e) => e._count.memories >= 2).sort((a, b) => b._count.memories - a._count.memories).slice(0, 12);
 

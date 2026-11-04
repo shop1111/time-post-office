@@ -34,6 +34,8 @@ interface L {
 }
 interface Cited {
   id: string;
+  /** 写信后被用户撤回：不再展示原文 */
+  retracted: boolean;
   content: string;
   occurredAt: string;
   entryId: string | null;
@@ -126,7 +128,7 @@ export function LetterView({ l, cited, sentences }: { l: L; cited: Cited[]; sent
                       )}
                       <div className="min-w-0">
                         <div className="text-[11px] text-ink-3">{fmtCN(c.occurredAt)}{c.title ? ` · ${c.title}` : ""}</div>
-                        <div className="truncate text-sm">{c.content}</div>
+                        <div className="truncate text-sm">{c.retracted ? <span className="text-ink-3">这条回忆已被你撤回</span> : c.content}</div>
                       </div>
                     </Link>
                   ))}

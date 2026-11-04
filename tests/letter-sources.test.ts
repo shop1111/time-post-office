@@ -25,7 +25,7 @@ const snapshot = (id: string) => ({ memoryId: id, entryId: null, content, occurr
 it.each(["", " 你好。\n\n西湖！🙂 再见。  ", "“日落很美。”\r\n他说：嗯……", "Hello! 3.14 is pi.\n末尾没有标点🙂"])("分句无损拼回正文：%s", (body) => {
   expect(splitLetterBody(body).join("")).toBe(body);
 });
-it("端点excerpt来自快照；更正和删除后仍返回原文并区分状态", async () => {
+it("端点excerpt来自快照；更正后仍返回原文，删除后标为撤回且不再返回原文", async () => {
   const mem = await memory();
   const body = ` 亲爱的你：\n${content}\n\n火星上有一座巨大的玻璃城堡。🙂`;
   const letter = await createLetter(body, JSON.stringify([snapshot(mem.id)]), JSON.stringify([mem.id]));
@@ -39,7 +39,13 @@ it("端点excerpt来自快照；更正和删除后仍返回原文并区分状态
   expect(corrected).toContainEqual(expect.objectContaining({ excerpt: content, state: "corrected" }));
   await db.memory.delete({ where: { id: mem.id } });
   const withdrawn = (await get()).sentences.flatMap((sentence: { sources: unknown[] }) => sentence.sources);
-  expect(withdrawn).toContainEqual(expect.objectContaining({ excerpt: content, state: "withdrawn" }));
+  expect(withdrawn).toContainEqual(expect.objectContaining({ excerpt: "", state: "withdrawn" }));
+});
+it("记忆被用户撤回（软撤回）后，出处标为撤回且不再返回原文", async () => {
+  const mem = await memory();
+  const letter = await createLetter(content, JSON.stringify([snapshot(mem.id)]), JSON.stringify([mem.id]));
+  await db.memory.update({ where: { id: mem.id }, data: { status: "retracted", retractedAt: date } });
+  expect((await letterSources(letter.id))!.sentences[0].sources).toEqual([expect.objectContaining({ memoryId: mem.id, excerpt: "", state: "withdrawn" })]);
 });
 it("每句至多两个出处，不匹配就空数组，祝福不牵强绑定", async () => {
   const snapshots = ["a", "b", "c"].map(snapshot);

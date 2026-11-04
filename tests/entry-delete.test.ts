@@ -5,7 +5,8 @@ import path from "node:path";
 import { DELETE } from "@/app/api/entries/[id]/route";
 import { UPLOAD_DIR, deleteUpload } from "@/lib/files";
 const f = vi.hoisted(() => ({ root: "", remove: vi.fn() }));
-vi.mock("@/lib/db", () => ({ db: { entry: { delete: f.remove } } }));
+// 删除记录时和它的收进邮局任务在同一事务里删（组长在 main 上的修复）
+vi.mock("@/lib/db", () => ({ db: { entry: { delete: f.remove }, job: { deleteMany: vi.fn(async () => ({ count: 0 })) }, $transaction: (ops: Promise<unknown>[]) => Promise.all(ops) } }));
 vi.mock("@/lib/story", () => ({ generateStoryCard: vi.fn() }));
 vi.mock("@/lib/files", async (original) => {
   const { mkdtempSync } = await import("node:fs"); const { tmpdir } = await import("node:os"); const { join } = await import("node:path");

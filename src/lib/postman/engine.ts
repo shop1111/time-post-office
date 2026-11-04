@@ -1,6 +1,7 @@
 /** 邮差引擎：候选去向与执行分支同源，单封失败不影响整轮。 */
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now as clockNow } from "@/lib/clock";
 import { logError } from "@/lib/errors";
 import { collectCandidates, type Snapshot } from "./triggers";
@@ -14,7 +15,7 @@ const STAGES: PostmanStage[] = ["retrieve", "generate", "check", "deliver"];
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
   const [entries, memories] = await Promise.all([
     db.entry.findMany({ select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
-    db.memory.findMany({ include: { entities: { include: { entity: true } } } }),
+    db.memory.findMany({ where: ACTIVE_MEMORY, include: { entities: { include: { entity: true } } } }),
   ]);
   const existing = new Set(entries.filter((entry) => entry.occurredAt <= now).map((entry) => entry.id));
   const frequencies = new Map<string, { name: string; type: string; entries: Set<string> }>();
