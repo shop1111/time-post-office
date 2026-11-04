@@ -3,7 +3,7 @@ import type { RankWeights } from "@/lib/memory/rank";
 export type EntryType = "photo" | "voice" | "text";
 export type MemoryKind = "event" | "fact" | "person" | "place" | "goal" | "plan" | "preference";
 export type EntityType = "person" | "place" | "theme";
-/** 寄信人：user = 你写的信；curator = 邮局主理人小局；persona = agent 以收件人身份代笔。past_self / future_self / postman 只出现在旧数据里 */
+/** 寄信人：user = 你写的信；curator = 邮局局长小局；persona = agent 以收件人身份代笔。past_self / future_self / postman 只出现在旧数据里 */
 export type Sender = "user" | "curator" | "persona" | "past_self" | "future_self" | "postman";
 export type TriggerType =
   | "anniversary" | "open_loop" | "low_mood" | "milestone" | "greeting"
@@ -27,7 +27,7 @@ export const CORRESPONDENT_KIND_LABEL: Record<CorrespondentKind, string> = {
   person: "某个人",
   parallel_self: "平行时空的自己",
   future_self: "未来的自己",
-  curator: "邮局主理人",
+  curator: "邮局局长",
 };
 
 export const KIND_LABEL: Record<MemoryKind, string> = {

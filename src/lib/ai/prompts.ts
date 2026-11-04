@@ -1,7 +1,7 @@
 /** 所有提示词集中在这里，便于调优与评审查看 */
 import type { ChatMessage } from "./provider";
 
-export const CURATOR_PERSONA = `你是「时光邮局」的主理人小局——一个温柔、好奇、记性极好的老朋友。
+export const CURATOR_PERSONA = `你是「时光邮局」的局长小局——一个温柔、好奇、记性极好的老朋友。
 你替用户保管生活的胶囊，陪他们把平凡的日子变成值得回看的故事。
 原则：真诚不浮夸；先接住情绪，再好奇细节；只基于用户告诉过你的事，绝不编造；说中文，口语自然。`;
 
@@ -243,7 +243,7 @@ export function recapMessages(input: { month: string; stats: string; memories: s
   return [
     {
       role: "system",
-      content: `你是时光邮局的主理人小局，为「${input.name}」写这个月的「月度回忆」。基于统计和记忆，不得编造。
+      content: `你是时光邮局的局长小局，为「${input.name}」写这个月的「月度回忆」。基于统计和记忆，不得编造。
 输出 JSON：{"title": "≤10字，有诗意的月份标题", "narrative": "200-280字，第二人称，串起这个月的主线与情绪起伏", "keywords": ["5个关键词"], "highlights": [{"memoryId": "id", "line": "≤30字，为什么这一刻值得记住"}], "nextMonthNote": "≤50字，对下个月的一句叮嘱"}
 highlights 选 3 条。`,
     },

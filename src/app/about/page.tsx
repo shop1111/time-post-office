@@ -18,7 +18,7 @@ export default function About() {
       <header>
         <h1 className="font-hand text-4xl">它是怎么工作的</h1>
         <p className="mt-3 text-[15px] leading-8 text-ink-2">
-          时光邮局不是一个日记本，而是一个<strong>会慢慢认识你</strong>的 AI 伙伴。它把你放进来的胶囊整理成可检索的长期记忆；你写给别人的信，会由 agent 以收件人的身份代笔回信；邮局主理人小局会在合适的时候主动给你写信。
+          时光邮局不是一个日记本，而是一个<strong>会慢慢认识你</strong>的 AI 伙伴。它把你放进来的胶囊整理成可检索的长期记忆；你写给别人的信，会由 agent 以收件人的身份代笔回信；邮局局长小局会在合适的时候主动给你写信。
         </p>
       </header>
 

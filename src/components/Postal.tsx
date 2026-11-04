@@ -47,7 +47,7 @@ export function Stamp({ party, className }: { party: LetterParty; className?: st
 export function senderText(p: LetterParty, writtenAt?: string | Date) {
   switch (stampKey(p)) {
     case "curator":
-      return "来自小局（邮局主理人）";
+      return "来自小局（邮局局长）";
     case "person":
       return `来自${p.name ?? "TA"} · agent 代笔`;
     case "parallel_self":
