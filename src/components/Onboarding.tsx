@@ -25,7 +25,7 @@ export function Onboarding() {
         <br />
         也可以<span className="text-post">写信</span>给某个瞬间帮过你的人、未来的自己，或者平行时空的自己。
         <br />
-        邮局主理人小局会慢慢记住你的故事，时不时给你来信。
+        邮局局长小局会慢慢记住你的故事，时不时给你来信。
       </p>
 
       <div className="card mt-8 w-full p-5 text-left">

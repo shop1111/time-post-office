@@ -42,9 +42,22 @@ model EntryMessage {
   entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
   role      String // user | assistant
   content   String
+  /// 小局这一轮的对话动作（见 src/lib/curator/planner.ts）：ask | follow | answer | comfort | close | deflect …
+  act       String?
   createdAt DateTime @default(now())
 
   @@index([entryId])
+}
+
+/// 小局自己的事：它在信里、对话里说过的关于自己和邮局的细节。之后检索出来，保证前后不矛盾
+model CuratorNote {
+  id        String   @id @default(cuid())
+  content   String
+  source    String // letter | interview
+  sourceId  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 /// 结构化记忆
@@ -102,7 +115,7 @@ model Profile {
   updatedAt   DateTime @updatedAt
 }
 
-/// 收件人：某个人 / 平行时空的自己 / 未来的自己 / 邮局主理人小局
+/// 收件人：某个人 / 平行时空的自己 / 未来的自己 / 邮局局长小局
 model Correspondent {
   id        String    @id @default(cuid())
   kind      String // person | parallel_self | future_self | curator

@@ -298,7 +298,7 @@ export const DEMO_LETTERS: DemoLetter[] = [
   {
     key: "welcome", sender: "curator", to: "curator", triggerType: "welcome", subject: "欢迎来到时光邮局", writtenDaysAgo: 178, deliverDaysAgo: 178, read: true,
     reason: "你放进了第一颗胶囊",
-    body: "小满，你好：\n\n我是时光邮局的主理人，你可以叫我小局。从今天起，你放进来的每一张照片、每一段话、每一行字，我都会好好保管。\n\n我不会催你每天都来。想起来的时候，随手放一颗胶囊就好。想对谁说点什么，也可以写信——写给帮过你的人、写给未来的自己，都可以。\n\n新的城市，慢慢来。\n\n—— 小局",
+    body: "小满，你好：\n\n我是时光邮局的局长，你可以叫我小局。从今天起，你放进来的每一张照片、每一段话、每一行字，我都会好好保管。\n\n我不会催你每天都来。想起来的时候，随手放一颗胶囊就好。想对谁说点什么，也可以写信——写给帮过你的人、写给未来的自己，都可以。\n\n新的城市，慢慢来。\n\n—— 小局",
     citeKeys: ["move"],
   },
   {

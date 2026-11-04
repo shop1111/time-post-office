@@ -6,7 +6,7 @@ export async function ensureSystemCorrespondents() {
   const find = async (kind: CorrespondentKind, name: string, relation: string) =>
     (await db.correspondent.findFirst({ where: { kind }, orderBy: { createdAt: "asc" } })) ??
     db.correspondent.create({ data: { kind, name, relation } });
-  const curator = await find("curator", CURATOR_NAME, "时光邮局的主理人，替你保管胶囊和信件");
+  const curator = await find("curator", CURATOR_NAME, "时光邮局的局长，替你保管胶囊和信件");
   const futureSelf = await find("future_self", "未来的我", "到了你选的那一天，这封信会由真实的你收到");
   return { curator, futureSelf };
 }
