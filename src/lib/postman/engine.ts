@@ -1,27 +1,38 @@
 /**
- * 邮差引擎：快照 → 触发器候选 → 频控 → 检索记忆 → 模仿口吻写信 → 事实自检 → 投递
+ * 小局的信箱：投递到期的信 → 代笔回信 → 触发器候选 → 频控 → 检索记忆 → 写信 → 事实自检 → 投递
  */
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
-import { chat, isMock } from "@/lib/ai/provider";
 import { chatJson } from "@/lib/ai/json";
-import { letterMessages, rewriteMessages, selfCheckMessages } from "@/lib/ai/prompts";
-import { mockLetter } from "@/lib/ai/mock";
+import { letterMessages } from "@/lib/ai/prompts";
+import { mockCuratorLetter } from "@/lib/ai/mock";
 import { now as clockNow } from "@/lib/clock";
 import { retrieve, formatMemories, fmtDate, type RetrievedMemory } from "@/lib/memory/retrieve";
 import { NOSTALGIA_WEIGHTS } from "@/lib/memory/rank";
 import { getProfile, styleText } from "@/lib/memory/profile";
+import { ensureSystemCorrespondents } from "@/lib/correspondents";
+import { CAPSULE_WHERE } from "@/lib/capsules";
 import { collectCandidates, type LetterCandidate, type Snapshot } from "./triggers";
+import { factCheck, processDueReplies } from "./reply";
 
-const MIN_GAP_HOURS = 20; // 频控：AI 来信至少间隔 20 小时（虚拟时间）
+const MIN_GAP_HOURS = 20; // 频控：小局主动来信至少间隔 20 小时
+/** 小局的信（含旧数据里的邮差来信） */
+const CURATOR_SENDERS = ["curator", "postman", "past_self", "future_self"];
 
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
-  const [entries, memories, letters, entities] = await Promise.all([
-    db.entry.findMany({ select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
+  const [entries, memories, letters, entities, sent, lastCurator] = await Promise.all([
+    db.entry.findMany({ where: CAPSULE_WHERE, select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
     db.memory.findMany({ where: ACTIVE_MEMORY, include: { entities: { include: { entity: true } } } }),
     db.letter.findMany({ where: { triggerKey: { not: null } }, select: { triggerKey: true } }),
     db.entity.findMany({ include: { _count: { select: { memories: { where: { memory: ACTIVE_MEMORY } } } } } }),
+    db.letter.findMany({
+      where: { sender: "user", correspondent: { kind: { not: "future_self" } } },
+      orderBy: { writtenAt: "desc" },
+      take: 20,
+      include: { correspondent: { select: { name: true } } },
+    }),
+    db.letter.findFirst({ where: { sender: { in: CURATOR_SENDERS }, deliveredAt: { not: null } }, orderBy: { deliveredAt: "desc" } }),
   ]);
   return {
     now,
@@ -39,6 +50,8 @@ export async function buildSnapshot(now: Date): Promise<Snapshot> {
     })),
     sentKeys: new Set(letters.map((l) => l.triggerKey!)),
     entityFreq: entities.map((e) => ({ name: e.name, type: e.type, count: e._count.memories })),
+    sentLetters: sent.map((l) => ({ id: l.id, to: l.correspondent?.name ?? "某人", subject: l.subject, body: l.body, writtenAt: l.writtenAt })),
+    lastCuratorAt: lastCurator?.deliveredAt ?? null,
   };
 }
 
@@ -46,19 +59,24 @@ export interface TickResult {
   now: Date;
   delivered: string[];
   generated: string[];
+  /** 新送达的代笔回信 */
+  replies: string[];
   candidates: Array<Pick<LetterCandidate, "key" | "type" | "sender" | "priority" | "reason">>;
   skippedByRateLimit: boolean;
 }
 
-/** 一次邮差巡检。maxLetters 用于「时光快进」时一次多送几封 */
+/** 打开页面时的一次检查。ignoreGap 用于设置页「让小局现在写一封信」 */
 export async function tick(opts: { maxLetters?: number; ignoreGap?: boolean } = {}): Promise<TickResult> {
   const now = await clockNow();
-  // 1. 投递到期的信（包括用户写给未来的时间胶囊）
+  // 1. 投递到期的信（写给未来自己的信）
   const due = await db.letter.findMany({ where: { deliveredAt: null, scheduledAt: { lte: now } } });
   for (const l of due) await db.letter.update({ where: { id: l.id }, data: { deliveredAt: now } });
 
-  // 2. 频控
-  const lastAi = await db.letter.findFirst({ where: { sender: { not: "user" }, deliveredAt: { not: null } }, orderBy: { deliveredAt: "desc" } });
+  // 2. 到时间的代笔回信（不受频控）
+  const replies = await processDueReplies(now);
+
+  // 3. 小局主动来信的频控
+  const lastAi = await db.letter.findFirst({ where: { sender: { in: CURATOR_SENDERS }, deliveredAt: { not: null } }, orderBy: { deliveredAt: "desc" } });
   const gapOk = opts.ignoreGap || !lastAi?.deliveredAt || now.getTime() - lastAi.deliveredAt.getTime() >= MIN_GAP_HOURS * 3_600_000;
 
   const snapshot = await buildSnapshot(now);
@@ -79,6 +97,7 @@ export async function tick(opts: { maxLetters?: number; ignoreGap?: boolean } = 
     now,
     delivered: due.map((d) => d.id),
     generated,
+    replies,
     candidates: candidates.slice(0, 8).map(({ key, type, sender, priority, reason }) => ({ key, type, sender, priority: Math.round(priority * 100) / 100, reason })),
     skippedByRateLimit: !gapOk,
   };
@@ -92,20 +111,14 @@ const LetterSchema = z.object({
 
 export async function writeLetter(c: LetterCandidate, now: Date) {
   const profile = await getProfile();
-  const { style, desc } = await styleText();
+  const { style } = await styleText();
+  const { curator } = await ensureSystemCorrespondents();
 
-  // 锚点记忆 + 语义检索补充；「过去的你」只能看到写信那天之前的记忆
+  // 锚点记忆 + 语义检索补充
   const anchors = (await db.memory.findMany({ where: { id: { in: c.anchorMemoryIds }, ...ACTIVE_MEMORY }, include: { entities: { include: { entity: true } } } })).sort(
     (a, b) => c.anchorMemoryIds.indexOf(a.id) - c.anchorMemoryIds.indexOf(b.id),
   );
-  const extra = await retrieve({
-    query: c.query || c.reason,
-    now,
-    k: 5,
-    entities: c.entities,
-    weights: NOSTALGIA_WEIGHTS,
-    before: c.sender === "past_self" ? new Date(c.writtenAt.getTime() + 86_400_000) : undefined,
-  });
+  const extra = await retrieve({ query: c.query || c.reason, now, k: 5, entities: c.entities, weights: NOSTALGIA_WEIGHTS });
   const anchorMems: RetrievedMemory[] = anchors.map((a) => ({
     id: a.id, kind: a.kind, content: a.content, importance: a.importance, occurredAt: a.occurredAt, entryId: a.entryId,
     entities: a.entities.map((e) => e.entity.name), score: 99, parts: { sim: 1, recency: 0, importance: a.importance / 10, entity: 1 },
@@ -115,20 +128,11 @@ export async function writeLetter(c: LetterCandidate, now: Date) {
 
   const draft = await chatJson(
     LetterSchema,
-    letterMessages({
-      sender: c.sender,
-      reason: c.reason,
-      today: fmtDate(now),
-      writtenAt: fmtDate(c.writtenAt),
-      memories: memText,
-      style: desc,
-      profile: profile.summary,
-      name: profile.name,
-    }),
+    letterMessages({ reason: c.reason, today: fmtDate(now), memories: memText, profile: profile.summary, name: profile.name }),
     {
       temperature: 0.85,
       maxTokens: 1400,
-      mock: () => mockLetter({ sender: c.sender, reason: c.reason, memories: mems, style, name: profile.name, writtenAt: c.writtenAt, today: now }),
+      mock: () => mockCuratorLetter({ type: c.type, reason: c.reason, memories: mems, style, name: profile.name, today: now }),
     },
   );
 
@@ -136,29 +140,21 @@ export async function writeLetter(c: LetterCandidate, now: Date) {
   const validIds = new Set(mems.map((m) => m.id));
   let cited = draft.cited.filter((id) => validIds.has(id));
   if (!cited.length) cited = c.anchorMemoryIds.filter((id) => validIds.has(id));
-  let body = draft.body;
-  let checked = "引用校验通过";
-  if (!isMock()) {
-    const check = await chatJson(z.object({ ok: z.boolean(), issues: z.array(z.string()).default([]) }), selfCheckMessages(body, memText), {
-      mock: () => ({ ok: true, issues: [] }),
-      temperature: 0,
-    });
-    if (!check.ok && check.issues.length) {
-      body = await chat(rewriteMessages(body, check.issues, memText), { temperature: 0.5, maxTokens: 1400, mock: () => body });
-      checked = `已修正 ${check.issues.length} 处无依据表述`;
-    } else checked = "事实核查通过";
-  }
+  const { body, checkStatus, checked } = await factCheck(draft.body, memText);
 
   return db.letter.create({
     data: {
-      sender: c.sender,
+      sender: "curator",
+      correspondentId: curator.id,
       subject: draft.subject,
       body: body.trim(),
       triggerType: c.type,
       triggerKey: c.key,
       reason: `${c.reason}。（${checked}）`,
+      checkStatus,
+      checkNote: checked,
       citedMemoryIds: JSON.stringify(cited),
-      writtenAt: c.writtenAt,
+      writtenAt: now,
       scheduledAt: now,
       deliveredAt: now,
     },

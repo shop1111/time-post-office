@@ -56,7 +56,7 @@ export function MemoryList({ items }: { items: Item[] }) {
 
   async function mutate(memory: Item, method: "PATCH" | "DELETE") {
     if (busy) return;
-    if (method === "DELETE" && !window.confirm("撤回后，这条记忆将停止用于长期记忆。原始日记和历史信件仍会保留。确认撤回？")) return;
+    if (method === "DELETE" && !window.confirm("撤回后，这条记忆将停止用于长期记忆。原始胶囊和历史信件仍会保留。确认撤回？")) return;
     setBusy(memory.id);
     setError("");
     setMessage("");
@@ -119,7 +119,7 @@ export function MemoryList({ items }: { items: Item[] }) {
               </label>
               <fieldset className="space-y-2" disabled={!!busy}>
                 <legend className="text-xs text-ink-2">关联人物、地点与主题</legend>
-                <p className="text-xs text-ink-3">修改内容后，请一起确认关联。邮差不会擅自推断人物关系。</p>
+                <p className="text-xs text-ink-3">修改内容后，请一起确认关联。小局不会擅自推断人物关系。</p>
                 {entities.map((entity, index) => <div className="flex gap-2" key={index}>
                   <select className="input text-sm" aria-label={`关联 ${index + 1} 类型`} value={entity.type} onChange={(event) => setEntities((current) => current.map((e, i) => i === index ? { ...e, type: event.target.value as EntityDraft["type"] } : e))}>
                     <option value="person">人物</option><option value="place">地点</option><option value="theme">主题</option>
@@ -136,7 +136,7 @@ export function MemoryList({ items }: { items: Item[] }) {
               </div>
             </form> : <p className="whitespace-pre-wrap break-words text-sm">{memory.content}</p>}
             <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-ink-3">
-              {memory.entryId ? <Link href={`/entry/${memory.entryId}`} className="hover:underline">{fmtCN(memory.occurredAt)}</Link> : <span>{fmtCN(memory.occurredAt)}</span>}
+              {memory.entryId ? <Link href={`/capsules/${memory.entryId}`} className="hover:underline">{fmtCN(memory.occurredAt)}</Link> : <span>{fmtCN(memory.occurredAt)}</span>}
               <span>重要度 {memory.importance}</span>
               {memory.status === "active" && memory.userEdited && <span className="text-post">已由你更正</span>}
               {memory.recallCount > 0 && <span>被想起 {memory.recallCount} 次</span>}

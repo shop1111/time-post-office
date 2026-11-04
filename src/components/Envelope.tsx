@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Stamp, SENDER_TEXT } from "./Postal";
+import { Stamp, senderText } from "./Postal";
 import { cn, fmtCN } from "@/lib/utils";
 
 export interface EnvelopeData {
@@ -13,13 +13,17 @@ export interface EnvelopeData {
   scheduledAt: string;
   readAt: string | null;
   writtenAt: string;
+  /** 往来的另一方 */
+  kind?: string | null;
+  name?: string | null;
 }
 
 export function Envelope({ l, index = 0 }: { l: EnvelopeData; index?: number }) {
   const unread = !l.readAt && !!l.deliveredAt;
+  const fromPast = l.sender === "user" && l.kind === "future_self";
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}>
-      <Link href={`/mailbox/${l.id}`} className="group block">
+      <Link href={`/mail/${l.id}`} className="group block">
         <div
           className={cn(
             "relative overflow-hidden rounded-xl border border-line bg-card shadow-[var(--shadow)] transition duration-300 group-hover:-translate-y-1 group-hover:rotate-[-0.6deg]",
@@ -33,14 +37,14 @@ export function Envelope({ l, index = 0 }: { l: EnvelopeData; index?: number }) 
           </svg>
           <div className="relative flex items-start gap-3 p-4 pt-6">
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] tracking-wider text-ink-3">{SENDER_TEXT[l.sender]}</div>
+              <div className="text-[11px] tracking-wider text-ink-3">{senderText(l, l.writtenAt)}</div>
               <div className="mt-1 truncate font-hand text-lg leading-snug">{l.subject}</div>
               <div className="mt-2 text-[11px] text-ink-3">
-                {l.sender === "past_self" || l.sender === "user" ? `寄出于 ${fmtCN(l.writtenAt)} · ` : ""}
+                {fromPast ? `写于 ${fmtCN(l.writtenAt)} · ` : ""}
                 {l.deliveredAt ? `${fmtCN(l.deliveredAt, false)}送达` : `将于 ${fmtCN(l.scheduledAt)} 送达`}
               </div>
             </div>
-            <Stamp sender={l.sender} />
+            <Stamp party={l} />
           </div>
           {unread && <span className="absolute left-3 top-4 h-2 w-2 animate-pulse rounded-full bg-stamp" />}
         </div>

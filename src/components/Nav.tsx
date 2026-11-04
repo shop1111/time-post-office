@@ -2,21 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, PenLine, CalendarDays, Mail, Brain, Settings } from "lucide-react";
+import { Home, Package, Mail, Brain, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TimeMachine } from "./TimeMachine";
 
 const TABS = [
-  { href: "/", label: "柜台", icon: Home },
-  { href: "/record", label: "记录", icon: PenLine },
-  { href: "/timeline", label: "时间线", icon: CalendarDays },
-  { href: "/mailbox", label: "信箱", icon: Mail },
+  { href: "/", label: "主页", icon: Home },
+  { href: "/capsules", label: "胶囊", icon: Package },
+  { href: "/mail", label: "邮件", icon: Mail },
   { href: "/memory", label: "记忆", icon: Brain },
 ];
 
-export function Nav({ unread, today, offsetDays }: { unread: number; today: string; offsetDays: number }) {
+export function Nav({ unread, today }: { unread: number; today: string }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  const d = new Date(today);
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-line/70 bg-paper/85 backdrop-blur">
@@ -36,12 +35,14 @@ export function Nav({ unread, today, offsetDays }: { unread: number; today: stri
                 )}
               >
                 {t.label}
-                {t.href === "/mailbox" && unread > 0 && <Badge n={unread} />}
+                {t.href === "/mail" && unread > 0 && <Badge n={unread} />}
               </Link>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <TimeMachine today={today} offsetDays={offsetDays} />
+            <span className="rounded-full border border-line bg-card px-3 py-1 font-hand text-sm text-ink-2" title="今天">
+              {d.getMonth() + 1}月{d.getDate()}日
+            </span>
             <Link href="/settings" aria-label="设置" className={cn("rounded-full p-2 text-ink-2 hover:bg-card", active("/settings") && "bg-card")}>
               <Settings size={18} />
             </Link>
@@ -51,7 +52,7 @@ export function Nav({ unread, today, offsetDays }: { unread: number; today: stri
 
       {/* 移动端底部 Tab */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5">
+        <div className="mx-auto grid max-w-md grid-cols-4">
           {TABS.map((t) => {
             const Icon = t.icon;
             const on = active(t.href);
@@ -59,7 +60,7 @@ export function Nav({ unread, today, offsetDays }: { unread: number; today: stri
               <Link key={t.href} href={t.href} className={cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", on ? "text-stamp" : "text-ink-3")}>
                 <Icon size={21} strokeWidth={on ? 2.2 : 1.7} />
                 {t.label}
-                {t.href === "/mailbox" && unread > 0 && <Badge n={unread} mobile />}
+                {t.href === "/mail" && unread > 0 && <Badge n={unread} mobile />}
               </Link>
             );
           })}

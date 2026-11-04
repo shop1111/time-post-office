@@ -24,7 +24,7 @@ function pickTemplate(e: { type: string; mood: number | null; occurredAt: Date }
 
 export async function generateStoryCard(entryId: string, options: CallOptions = {}, checkpoint?: (tx: Prisma.TransactionClient, card: StoryCard) => Promise<void>) {
   const entry = await db.entry.findUniqueOrThrow({ where: { id: entryId }, include: { messages: { orderBy: { createdAt: "asc" } } } });
-  const conversation = entry.messages.map((m) => `${m.role === "user" ? "我" : "邮差"}：${m.content}`).join("\n");
+  const conversation = entry.messages.map((m) => `${m.role === "user" ? "我" : "小局"}：${m.content}`).join("\n");
   const { desc } = await styleText();
   const story = await chatJson(
     StorySchema,

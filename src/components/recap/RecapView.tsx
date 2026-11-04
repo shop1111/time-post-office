@@ -56,13 +56,13 @@ export function RecapView({ month, initial }: { month: string; initial: RecapPay
         <motion.div animate={{ rotateY: [0, 180, 360] }} transition={{ repeat: Infinity, duration: 2 }} className="text-5xl">
           📖
         </motion.div>
-        <p className="font-hand text-lg">邮差正在翻阅这个月的信件…</p>
+        <p className="font-hand text-lg">小局正在翻阅这个月的胶囊…</p>
         <p className="text-xs text-ink-3">统计情绪曲线 · 找出高光时刻 · 写一段月度叙事</p>
       </div>
     );
   if (error) return <div className="card mt-8 space-y-3 p-6"><p role="alert">{error}</p><button className="btn btn-ghost" onClick={build}>重新生成月度回忆</button></div>;
   if (empty || !recap)
-    return <p className="mt-16 text-center text-ink-3">这个月没有寄存任何生活。</p>;
+    return <p className="mt-16 text-center text-ink-3">这个月还没有放进任何胶囊。</p>;
 
   const s = recap.stats;
   return (
@@ -80,7 +80,7 @@ export function RecapView({ month, initial }: { month: string; initial: RecapPay
             ))}
           </div>
           <div className="mt-6 grid grid-cols-3 gap-3 text-center">
-            <Stat n={s.count} label="段生活" />
+            <Stat n={s.count} label="颗胶囊" />
             <Stat n={s.photos.length} label="张照片" />
             <Stat n={s.topPeople.length} label="个重要的人" />
           </div>
@@ -134,7 +134,7 @@ export function RecapView({ month, initial }: { month: string; initial: RecapPay
             <h2 className="mb-3 font-hand text-xl">本月高光</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               {recap.highlights.map((h) => (
-                <Link key={h.memoryId} href={h.entryId ? `/entry/${h.entryId}` : "#"} className="card overflow-hidden transition hover:-translate-y-0.5">
+                <Link key={h.memoryId} href={h.entryId ? `/capsules/${h.entryId}` : "#"} className="card overflow-hidden transition hover:-translate-y-0.5">
                   {h.photoPath && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={photoUrl(h.photoPath)!} alt="" className="h-28 w-full object-cover" />

@@ -102,27 +102,48 @@ model Profile {
   updatedAt   DateTime @updatedAt
 }
 
-/// 信件：AI 来信 & 用户写给未来的时间胶囊
+/// 收件人：某个人 / 平行时空的自己 / 未来的自己 / 邮局主理人小局
+model Correspondent {
+  id        String    @id @default(cuid())
+  kind      String // person | parallel_self | future_self | curator
+  name      String
+  relation  String    @default("") // 他是谁、和我的关系
+  moment    String    @default("") // 那个瞬间发生了什么 / 平行时空的分岔：当时如果选了……
+  momentAt  DateTime? // 只能是过去
+  voice     String    @default("") // 他说话的样子（用户描述，可选）
+  createdAt DateTime  @default(now())
+  letters   Letter[]
+}
+
+/// 信件：小局的来信、用户寄出的信、代笔回信、写给未来自己的信
 model Letter {
-  id             String    @id @default(cuid())
-  sender         String // past_self | future_self | postman | user
-  subject        String
-  body           String
-  triggerType    String // anniversary | open_loop | low_mood | milestone | capsule | welcome | manual
-  triggerKey     String?   @unique // 去重键
-  reason         String    @default("")
-  checkStatus    String    @default("unchecked")
-  checkNote      String    @default("")
-  citedMemoryIds String    @default("[]") // JSON string[]
-  writtenAt      DateTime  @default(now()) // 落款时间（"过去的你"可早于现在）
-  scheduledAt    DateTime
-  deliveredAt    DateTime?
-  readAt         DateTime?
-  reply          String?
-  repliedAt      DateTime?
-  createdAt      DateTime  @default(now())
+  id              String         @id @default(cuid())
+  sender          String // user | curator | persona（旧数据可能是 past_self | future_self | postman）
+  correspondentId String?
+  correspondent   Correspondent? @relation(fields: [correspondentId], references: [id], onDelete: Cascade)
+  inReplyToId     String?
+  subject         String
+  body            String
+  triggerType     String // anniversary | open_loop | low_mood | milestone | greeting | reply | future_letter | letter | welcome | manual
+  triggerKey      String?        @unique // 去重键
+  reason          String         @default("")
+  checkStatus     String         @default("unchecked")
+  checkNote       String         @default("")
+  citedMemoryIds  String         @default("[]") // JSON string[]
+  knowledge       String         @default("{}") // JSON：代笔时判定的「他知道 / 他不知道」
+  writtenAt       DateTime       @default(now())
+  scheduledAt     DateTime
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  replyDueAt      DateTime? // 寄给虚拟收件人的信：代笔回信的时间
+  replyLetterId   String? // 回信生成后回填，防止重复生成
+  reply           String? // 旧版回信（只读展示）
+  repliedAt       DateTime?
+  createdAt       DateTime       @default(now())
 
   @@index([scheduledAt])
+  @@index([correspondentId])
+  @@index([replyDueAt])
 }
 
 model StoryCard {

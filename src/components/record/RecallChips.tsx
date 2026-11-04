@@ -44,7 +44,7 @@ export function RecallChips({ items, weights }: { items: Recalled[]; weights?: R
             <div className="mt-2 rounded-xl border border-line bg-card p-3">
               <div className="flex items-baseline justify-between gap-2 text-[11px] text-ink-3">
                 <span>{fmtCN(cur.date)} 的记忆</span>
-                <Link href={cur.entryId ? `/entry/${cur.entryId}` : "/memory"} target="_blank" className="hover:text-ink hover:underline">
+                <Link href={cur.entryId ? `/capsules/${cur.entryId}` : "/memory"} target="_blank" className="hover:text-ink hover:underline">
                   看原记录 →
                 </Link>
               </div>

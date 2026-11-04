@@ -13,9 +13,9 @@ export function DemoButton({ label = "载入示例人生", action = "load", clas
     setBusy(true);
     try {
       await fetch("/api/demo", { method: "POST", body: JSON.stringify({ action }) });
-      sessionStorage.removeItem("postman-pinged");
+      sessionStorage.removeItem("curator-pinged");
       toast(action === "load" ? "已载入林小满的半年时光" : "已清空所有数据", action === "load" ? "📦" : "🧹");
-      // 整页刷新，让邮差重新巡检
+      // 整页刷新，让小局重新检查信箱
       window.location.href = "/";
     } finally {
       setBusy(false);
@@ -24,7 +24,7 @@ export function DemoButton({ label = "载入示例人生", action = "load", clas
   }
   return (
     <button className={className} onClick={run} disabled={busy}>
-      {busy ? "邮差正在搬运档案…" : label}
+      {busy ? "小局正在搬运档案…" : label}
     </button>
   );
 }

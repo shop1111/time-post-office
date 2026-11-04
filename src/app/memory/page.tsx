@@ -18,9 +18,9 @@ export default async function MemoryPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="font-hand text-3xl">记忆宫殿</h1>
+        <h1 className="font-hand text-3xl">记忆</h1>
         <p className="mt-1 text-sm text-ink-2">记错了可以更正，不想用于长期记忆可以撤回。记忆由你掌控。</p>
-        <p className="mt-2 text-xs leading-6 text-ink-3">撤回会保留操作记录，原始日记和历史信件仍在；不等同于删除全部相关内容。</p>
+        <p className="mt-2 text-xs leading-6 text-ink-3">撤回会保留操作记录，原始胶囊和历史信件仍在；不等同于删除全部相关内容。</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-5">
@@ -41,7 +41,7 @@ export default async function MemoryPage() {
         </div>
         <div className="card p-5 md:col-span-2">
           <h2 className="font-hand text-xl">你的文风指纹</h2>
-          <p className="mt-1 text-xs text-ink-3">从你写下的文字中本地统计，用于让「过去 / 未来的你」写信时像你本人。</p>
+          <p className="mt-1 text-xs text-ink-3">从你写下的文字中本地统计，用于让平行时空的你写信时像你本人。</p>
           {style ? (
             <dl className="mt-3 space-y-2 text-sm">
               <Row k="平均句长" v={`${style.avgSentenceLen} 字`} />

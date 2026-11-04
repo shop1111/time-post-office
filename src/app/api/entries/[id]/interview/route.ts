@@ -25,7 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (body?.message !== undefined && typeof body.message !== "string") return fail(400, "INVALID_MESSAGE", "message 必须是文字");
     const message = typeof body?.message === "string" ? body.message.trim() : "";
     const entry = await db.entry.findUnique({ where: { id }, include: { messages: { orderBy: { createdAt: "asc" } } } });
-    if (!entry) return fail(404, "ENTRY_NOT_FOUND", "找不到这条记录");
+    if (!entry) return fail(404, "ENTRY_NOT_FOUND", "找不到这颗胶囊");
     const round = entry.messages.filter((m) => m.role === "assistant").length;
     if (entry.interviewDone || round >= MAX_ROUNDS) return fail(400, "INTERVIEW_LIMIT_REACHED", "追问已结束，请收进邮局");
     const response = sseResponse(req.signal, (writer) => {
@@ -46,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             ...entry.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
           ];
           if (message) history.push({ role: "user", content: message });
-          if (history.length === 1) history.push({ role: "user", content: "（用户刚寄出这条记录，请你开口）" });
+          if (history.length === 1) history.push({ role: "user", content: "（用户刚放进这颗胶囊，请你开口）" });
           const lastUser = message || [...entry.messages].reverse().find((m) => m.role === "user")?.content;
           writer.send("meta", {
             round, maxRounds: MAX_ROUNDS, final: round >= MAX_ROUNDS - 1, weights,

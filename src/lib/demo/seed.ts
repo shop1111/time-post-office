@@ -2,9 +2,9 @@ import { db } from "@/lib/db";
 import { embed } from "@/lib/ai/provider";
 import { toBytes } from "@/lib/memory/embed-lite";
 import { computeStyle } from "@/lib/memory/style";
-import { resetClock } from "@/lib/clock";
 import { DERIVED_REVISION_KEY, PROFILE_REVISION_KEY } from "@/lib/memory/consistency";
-import { DEMO_ENTRIES, DEMO_LETTERS, EXAM_IN_DAYS } from "./data";
+import { ensureSystemCorrespondents } from "@/lib/correspondents";
+import { DEMO_CORRESPONDENTS, DEMO_ENTRIES, DEMO_LETTERS, EXAM_IN_DAYS } from "./data";
 
 const DAY = 86_400_000;
 
@@ -18,12 +18,12 @@ export async function clearAll() {
     db.entryMessage.deleteMany(),
     db.entry.deleteMany(),
     db.letter.deleteMany(),
+    db.correspondent.deleteMany(),
     db.monthlyRecap.deleteMany(),
     db.profile.deleteMany(),
     // 数据清空后派生版本从 0 重新开始
-    db.setting.deleteMany({ where: { key: { in: [DERIVED_REVISION_KEY, PROFILE_REVISION_KEY] } } }),
+    db.setting.deleteMany({ where: { key: { in: [DERIVED_REVISION_KEY, PROFILE_REVISION_KEY, "clockOffsetMs"] } } }),
   ]);
-  await resetClock();
 }
 
 /** 载入示例人生「林小满」。时间相对真实的现在计算 */
@@ -95,29 +95,66 @@ export async function loadDemo() {
     memIdsByEntry.set(e.key, ids);
   }
 
+  // 收件人：小局、未来的我，以及示例里的朋友
+  const { curator, futureSelf } = await ensureSystemCorrespondents();
+  const people = new Map<string, string>([["curator", curator.id], ["future_self", futureSelf.id]]);
+  for (const c of DEMO_CORRESPONDENTS) {
+    const row = await db.correspondent.create({
+      data: { kind: "person", name: c.name, relation: c.relation, moment: c.moment, momentAt: at(c.momentDaysAgo, 16), voice: c.voice, createdAt: at(178, 22) },
+    });
+    people.set(c.key, row.id);
+  }
+
+  // 今天的时间不能晚于现在
+  const past = (daysAgo: number, hour: number) => {
+    const d = at(daysAgo, hour);
+    return d.getTime() > now.getTime() ? new Date(now.getTime() - 60_000) : d;
+  };
+  const letterIds = new Map<string, string>();
   for (const l of DEMO_LETTERS) {
-    const delivered = at(l.deliverDaysAgo, 9);
+    const delivered = l.deliverDaysAgo >= 0 ? past(l.deliverDaysAgo, 9) : at(l.deliverDaysAgo, 9);
+    const writtenAt = past(l.writtenDaysAgo, 21);
     const key = l.key?.startsWith("anniv:")
       ? l.key.replace(/^anniv:([^:]+):/, (_, k: string) => `anniv:${entryIds.get(k)}:`)
       : l.key;
-    await db.letter.create({
+    const citedIds = (l.citeKeys ?? []).flatMap((k) => memIdsByEntry.get(k) ?? []);
+    const original = l.inReplyTo ? letterIds.get(l.inReplyTo) : undefined;
+    const knowledge =
+      l.sender === "persona"
+        ? { known: (await db.memory.findMany({ where: { id: { in: citedIds } } })).map((m) => ({ id: m.id, content: m.content, why: "TA也在场" })), unknown: [] }
+        : {};
+    const letter = await db.letter.create({
       data: {
         sender: l.sender,
+        correspondentId: people.get(l.to) ?? curator.id,
+        inReplyToId: original ?? null,
         subject: l.subject,
         body: l.body,
         triggerType: l.triggerType,
         triggerKey: key,
         reason: l.reason,
-        citedMemoryIds: JSON.stringify((l.citeKeys ?? []).flatMap((k) => memIdsByEntry.get(k) ?? [])),
-        writtenAt: at(l.writtenDaysAgo, 21),
+        citedMemoryIds: JSON.stringify(citedIds),
+        knowledge: JSON.stringify(knowledge),
+        writtenAt,
         scheduledAt: delivered,
         deliveredAt: l.deliverDaysAgo >= 0 ? delivered : null,
         readAt: l.read ? delivered : null,
-        reply: l.reply ?? null,
-        repliedAt: l.reply ? new Date(delivered.getTime() + 3 * 3_600_000) : null,
-        createdAt: at(l.writtenDaysAgo, 21),
+        replyDueAt: l.replyInHours !== undefined ? new Date(now.getTime() + l.replyInHours * 3_600_000) : null,
+        createdAt: writtenAt,
       },
     });
+    letterIds.set(l.subject, letter.id);
+    if (original) await db.letter.update({ where: { id: original }, data: { replyLetterId: letter.id, replyDueAt: delivered } });
+    // 小满对小局来信的回信：一封寄给小局的信（不再等回信）
+    if (l.reply) {
+      const at3h = new Date(delivered.getTime() + 3 * 3_600_000);
+      await db.letter.create({
+        data: {
+          sender: "user", correspondentId: curator.id, inReplyToId: letter.id, subject: `回复：${l.subject}`, body: l.reply,
+          triggerType: "letter", reason: "你写给小局的回信", writtenAt: at3h, scheduledAt: at3h, deliveredAt: at3h, readAt: at3h, createdAt: at3h,
+        },
+      });
+    }
   }
 
   // 画像：文风指纹本地计算；摘要用预写的，保证演示质量且不依赖网络
@@ -135,5 +172,5 @@ export async function loadDemo() {
   // 预写画像对应当前（初始）版本
   await db.setting.upsert({ where: { key: PROFILE_REVISION_KEY }, create: { key: PROFILE_REVISION_KEY, value: "0" }, update: { value: "0" } });
 
-  return { entries: DEMO_ENTRIES.length, letters: DEMO_LETTERS.length };
+  return { entries: DEMO_ENTRIES.length, letters: DEMO_LETTERS.length, correspondents: DEMO_CORRESPONDENTS.length };
 }

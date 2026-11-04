@@ -11,7 +11,7 @@ import { ScoreBreakdown } from "@/components/memory/ScoreBreakdown";
 import { fmtCN, fmtTime, photoUrl, moodEmoji } from "@/lib/utils";
 import { KIND_LABEL, type MemoryKind } from "@/lib/types";
 
-export default async function EntryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CapsulePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const entry = await db.entry.findUnique({
     where: { id },
@@ -31,8 +31,8 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <Link href="/timeline" className="inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
-        <ArrowLeft size={14} /> 时间线
+      <Link href="/capsules" className="inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
+        <ArrowLeft size={14} /> 胶囊
       </Link>
 
       <header>
@@ -64,7 +64,7 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
 
       {entry.messages.length > 0 && (
         <section className="card p-5">
-          <h2 className="font-hand text-lg">和邮差的对话</h2>
+          <h2 className="font-hand text-lg">和小局的对话</h2>
           <div className="mt-3 space-y-2.5">
             {entry.messages.map((m) => (
               <div key={m.id} className={m.role === "user" ? "text-right" : ""}>
@@ -84,7 +84,7 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
 
       {entry.memories.length > 0 && (
         <section className="card p-5">
-          <h2 className="font-hand text-lg">邮差从这天记住的事</h2>
+          <h2 className="font-hand text-lg">小局从这天记住的事</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {entry.memories.map((m) => (
               <li key={m.id} className="flex gap-2">
@@ -105,10 +105,10 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
 
       {related.length > 0 && (
         <section>
-          <h2 className="mb-3 font-hand text-xl">这让邮差想起</h2>
+          <h2 className="mb-3 font-hand text-xl">这让小局想起</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {related.map((r) => (
-              <Link key={r.id} href={r.entryId ? `/entry/${r.entryId}` : "/memory"} className="card block p-4 transition hover:-translate-y-0.5">
+              <Link key={r.id} href={r.entryId ? `/capsules/${r.entryId}` : "/memory"} className="card block p-4 transition hover:-translate-y-0.5">
                 <div className="text-xs text-ink-3">{fmtCN(r.occurredAt)}</div>
                 <p className="mt-1 text-sm">{r.content}</p>
                 <ScoreBreakdown compact className="mt-3" parts={r.parts} score={r.score} />

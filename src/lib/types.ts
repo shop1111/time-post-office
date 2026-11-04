@@ -3,14 +3,31 @@ import type { RankWeights } from "@/lib/memory/rank";
 export type EntryType = "photo" | "voice" | "text";
 export type MemoryKind = "event" | "fact" | "person" | "place" | "goal" | "plan" | "preference";
 export type EntityType = "person" | "place" | "theme";
-export type Sender = "past_self" | "future_self" | "postman" | "user";
-export type TriggerType = "anniversary" | "open_loop" | "low_mood" | "milestone" | "capsule" | "welcome" | "manual";
+/** 寄信人：user = 你写的信；curator = 邮局主理人小局；persona = agent 以收件人身份代笔。past_self / future_self / postman 只出现在旧数据里 */
+export type Sender = "user" | "curator" | "persona" | "past_self" | "future_self" | "postman";
+export type TriggerType =
+  | "anniversary" | "open_loop" | "low_mood" | "milestone" | "greeting"
+  | "reply" | "future_letter" | "letter" | "welcome" | "manual" | "capsule";
+/** 收件人：某个人 / 平行时空的自己 / 未来的自己 / 小局 */
+export type CorrespondentKind = "person" | "parallel_self" | "future_self" | "curator";
+/** 只有虚拟形象才由 agent 代笔回信；写给未来自己的信由真实的你在未来收到 */
+export const VIRTUAL_KINDS: CorrespondentKind[] = ["person", "parallel_self", "curator"];
+export const CURATOR_NAME = "小局";
 
 export const SENDER_LABEL: Record<Sender, string> = {
-  past_self: "过去的你",
-  future_self: "未来的你",
-  postman: "时光邮差",
-  user: "你自己",
+  user: "你",
+  curator: "小局",
+  persona: "代笔回信",
+  past_self: "旧版来信",
+  future_self: "旧版来信",
+  postman: "小局",
+};
+
+export const CORRESPONDENT_KIND_LABEL: Record<CorrespondentKind, string> = {
+  person: "某个人",
+  parallel_self: "平行时空的自己",
+  future_self: "未来的自己",
+  curator: "邮局主理人",
 };
 
 export const KIND_LABEL: Record<MemoryKind, string> = {
@@ -132,15 +149,15 @@ export interface FinalizeEvents {
   error: FinalizeErrorEvent;
   heartbeat: HeartbeatEvent;
 }
-export type PostmanAction = "tick" | "forward" | "reset" | "force";
-export interface PostmanRequest { action?: PostmanAction; days?: number }
+export type PostmanAction = "tick" | "force";
+export interface PostmanRequest { action?: PostmanAction }
 export type PostmanOutcome = "deduplicated" | "rate_limited" | "type_limited" | "quota_limited" | "selected" | "generated" | "failed";
 export type PostmanStage = "retrieve" | "generate" | "check" | "deliver";
 export interface PostmanStageInfo {
   name: PostmanStage; status: StageStatus; durationMs?: number; execution?: ExecutionInfo;
 }
 export interface PostmanCandidate {
-  key: string; type: TriggerType; sender: Exclude<Sender, "user">; priority: number; reason: string;
+  key: string; type: TriggerType; sender: "curator"; priority: number; reason: string;
 }
 export interface PostmanDecision extends PostmanCandidate {
   rank: number;
@@ -170,3 +187,12 @@ export interface PostmanEvents {
 }
 export type CheckStatus = "passed" | "rewritten" | "unchecked" | "failed";
 export interface LetterCheckInfo { checkStatus: CheckStatus; checkNote: string }
+
+/** 代笔回信时判定的知识边界：哪些记忆收件人会知道、哪些不会 */
+export interface KnowledgeVerdict { id: string; content: string; why: string }
+export interface LetterKnowledge {
+  known: KnowledgeVerdict[];
+  unknown: KnowledgeVerdict[];
+  /** 平行时空：只用了分岔点之前的记忆 */
+  before?: string;
+}

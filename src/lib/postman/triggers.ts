@@ -1,8 +1,8 @@
 /**
- * 邮差引擎 · 触发器
- * 输入一份数据快照，输出「值得写一封信」的候选，按优先级排序。纯函数，便于单测。
+ * 小局来信 · 触发器
+ * 输入一份数据快照，输出「小局值得写一封信」的候选，按优先级排序。纯函数，便于单测。
  */
-import type { Sender, TriggerType } from "@/lib/types";
+import type { TriggerType } from "@/lib/types";
 
 const DAY = 86_400_000;
 
@@ -12,12 +12,18 @@ export interface Snapshot {
   memories: Array<{ id: string; entryId: string | null; kind: string; content: string; importance: number; occurredAt: Date; dueAt: Date | null; resolved: boolean; entities: string[] }>;
   sentKeys: Set<string>;
   entityFreq: Array<{ name: string; type: string; count: number }>;
+  /** 用户寄出的信（不含写给未来自己的） */
+  sentLetters?: Array<{ id: string; to: string; subject: string; body: string; writtenAt: Date }>;
+  /** 小局上一封信的送达时间 */
+  lastCuratorAt?: Date | null;
+  /** 随机数，测试里可注入；默认按日期做种子，同一天结果稳定 */
+  rand?: () => number;
 }
 
 export interface LetterCandidate {
   key: string;
   type: TriggerType;
-  sender: Exclude<Sender, "user">;
+  sender: "curator";
   priority: number;
   reason: string;
   writtenAt: Date;
@@ -26,12 +32,12 @@ export interface LetterCandidate {
   entities: string[];
 }
 
-/** 回顾节点：距今天数 → 寄信人 */
-export const ANNIVERSARY_MILESTONES: Array<{ days: number; label: string; sender: "postman" | "past_self" }> = [
-  { days: 30, label: "一个月前", sender: "postman" },
-  { days: 90, label: "三个月前", sender: "past_self" },
-  { days: 180, label: "半年前", sender: "postman" },
-  { days: 365, label: "一年前", sender: "past_self" },
+/** 回顾节点：距今天数 */
+export const ANNIVERSARY_MILESTONES: Array<{ days: number; label: string }> = [
+  { days: 30, label: "一个月前" },
+  { days: 90, label: "三个月前" },
+  { days: 180, label: "半年前" },
+  { days: 365, label: "一年前" },
 ];
 const ANNIV_WINDOW_DAYS = 21;
 
@@ -51,10 +57,10 @@ export function anniversaryTriggers(s: Snapshot): LetterCandidate[] {
       out.push({
         key,
         type: "anniversary",
-        sender: ms.sender,
+        sender: "curator",
         priority: top + ms.days / 120 + (e.type === "photo" ? 1 : 0) + (e.mood ?? 0),
         reason: `${ms.label}的${e.occurredAt.getMonth() + 1}月${e.occurredAt.getDate()}日，你记录了「${e.title ?? "那一天"}」`,
-        writtenAt: ms.sender === "past_self" ? e.occurredAt : s.now,
+        writtenAt: s.now,
         anchorMemoryIds: anchor.slice(0, 3).map((m) => m.id),
         query: anchor.map((m) => m.content).join(" ") || (e.title ?? ""),
         entities: [...new Set(anchor.flatMap((m) => m.entities))],
@@ -64,7 +70,7 @@ export function anniversaryTriggers(s: Snapshot): LetterCandidate[] {
   return out;
 }
 
-/** 未完结线索：计划/考试/约定到期了，过去的你来问一句「后来怎么样了」 */
+/** 未完结线索：计划/考试/约定到期了，小局来问一句「后来怎么样了」 */
 export function openLoopTriggers(s: Snapshot): LetterCandidate[] {
   return s.memories
     .filter((m) => m.kind === "plan" && m.dueAt && !m.resolved)
@@ -76,17 +82,17 @@ export function openLoopTriggers(s: Snapshot): LetterCandidate[] {
     .map((m) => ({
       key: `loop:${m.id}`,
       type: "open_loop" as const,
-      sender: "past_self" as const,
+      sender: "curator" as const,
       priority: 9 + m.importance / 10,
       reason: `你在${m.occurredAt.getMonth() + 1}月${m.occurredAt.getDate()}日提到「${clip(m.content, 26)}」，那个日子已经到了`,
-      writtenAt: m.occurredAt,
+      writtenAt: s.now,
       anchorMemoryIds: [m.id],
       query: m.content,
       entities: m.entities,
     }));
 }
 
-/** 情绪低谷：最近一周至少 2 条记录且平均情绪偏低 → 未来的你来安慰 */
+/** 情绪低谷：最近一周至少 2 颗胶囊且平均情绪偏低 → 小局来安慰 */
 export function lowMoodTriggers(s: Snapshot): LetterCandidate[] {
   const recent = s.entries.filter((e) => e.mood !== null && s.now.getTime() - e.occurredAt.getTime() <= 7 * DAY && e.occurredAt <= s.now);
   if (recent.length < 2) return [];
@@ -105,7 +111,7 @@ export function lowMoodTriggers(s: Snapshot): LetterCandidate[] {
     {
       key,
       type: "low_mood",
-      sender: "future_self",
+      sender: "curator",
       priority: 10 + Math.abs(avg) * 3,
       reason: `这一周你的记录里有些低落（情绪均值 ${avg.toFixed(2)}）`,
       writtenAt: s.now,
@@ -127,9 +133,9 @@ export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
       out.push({
         key,
         type: "milestone",
-        sender: "postman",
+        sender: "curator",
         priority: 6 + target / 100,
-        reason: `你已经在时光邮局寄存了 ${target} 段生活`,
+        reason: `你已经在时光邮局放了 ${target} 颗胶囊`,
         writtenAt: s.now,
         anchorMemoryIds: best.map((m) => m.id),
         query: best.map((m) => m.content).join(" "),
@@ -145,7 +151,7 @@ export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
     out.push({
       key,
       type: "milestone",
-      sender: "postman",
+      sender: "curator",
       priority: 5 + p.count / 4,
       reason: `「${p.name}」已经在你的生活里出现了 ${p.count} 次`,
       writtenAt: s.now,
@@ -157,8 +163,72 @@ export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
   return out;
 }
 
+export const GREETING_GAP_DAYS = 3;
+const GREETING_CHANCE = 0.5;
+
+/** 随手问候：距小局上一封信满 3 天，随机挑一颗最近的胶囊或一封你寄出的信，写信问候 */
+export function greetingTrigger(s: Snapshot): LetterCandidate[] {
+  if (s.lastCuratorAt && s.now.getTime() - s.lastCuratorAt.getTime() < GREETING_GAP_DAYS * DAY) return [];
+  const rand = s.rand ?? seededRand(s.now);
+  if (rand() >= GREETING_CHANCE) return [];
+  const recent = (d: Date) => d <= s.now && s.now.getTime() - d.getTime() <= 14 * DAY;
+  const pool: Array<{ kind: "capsule" | "letter"; id: string; reason: string; query: string; anchors: string[]; entities: string[] }> = [];
+  for (const e of s.entries.filter((e) => recent(e.occurredAt))) {
+    const mems = s.memories.filter((m) => m.entryId === e.id);
+    pool.push({
+      kind: "capsule",
+      id: e.id,
+      reason: `小局翻到了你${md(e.occurredAt)}放进来的胶囊「${e.title ?? "那一天"}」，想问候你一下`,
+      query: mems.map((m) => m.content).join(" ") || (e.title ?? ""),
+      anchors: mems.map((m) => m.id).slice(0, 2),
+      entities: [...new Set(mems.flatMap((m) => m.entities))],
+    });
+  }
+  for (const l of (s.sentLetters ?? []).filter((l) => recent(l.writtenAt))) {
+    pool.push({
+      kind: "letter",
+      id: l.id,
+      reason: `${md(l.writtenAt)}你给「${l.to}」寄了一封信《${clip(l.subject, 14)}》，小局想问问你最近好不好`,
+      query: `${l.to} ${l.body.slice(0, 120)}`,
+      anchors: [],
+      entities: [l.to],
+    });
+  }
+  if (!pool.length) return [];
+  const pick = pool[Math.floor(rand() * pool.length) % pool.length];
+  const key = `greet:${pick.kind}:${pick.id}`;
+  if (s.sentKeys.has(key)) return [];
+  return [
+    {
+      key,
+      type: "greeting",
+      sender: "curator",
+      priority: 4,
+      reason: pick.reason,
+      writtenAt: s.now,
+      anchorMemoryIds: pick.anchors,
+      query: pick.query,
+      entities: pick.entities,
+    },
+  ];
+}
+
 export function collectCandidates(s: Snapshot): LetterCandidate[] {
-  return [...lowMoodTriggers(s), ...openLoopTriggers(s), ...anniversaryTriggers(s), ...milestoneTriggers(s)].sort((a, b) => b.priority - a.priority);
+  return [...lowMoodTriggers(s), ...openLoopTriggers(s), ...anniversaryTriggers(s), ...milestoneTriggers(s), ...greetingTrigger(s)].sort((a, b) => b.priority - a.priority);
+}
+
+const md = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
+
+/** 按日期做种子的伪随机数（mulberry32） */
+export function seededRand(d: Date): () => number {
+  let a = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);

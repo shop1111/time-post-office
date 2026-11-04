@@ -1,27 +1,17 @@
 import { db } from "./db";
 
 /**
- * 虚拟时钟：演示时可「时光快进」，所有业务逻辑都通过 now() 取当前时间。
- * 偏移量（毫秒）持久化在 Setting 表。
+ * 时钟：一律使用真实的今天。所有业务逻辑都通过 now() 取当前时间，便于测试替换。
  */
-const KEY = "clockOffsetMs";
 export const MS_DAY = 86_400_000;
 
-export async function getOffset(): Promise<number> {
-  const row = await db.setting.findUnique({ where: { key: KEY } });
-  return row ? Number(row.value) || 0 : 0;
-}
+// 旧版「时光机」留下的虚拟时间偏移，第一次取时间时顺手清掉
+let legacyCleaned = false;
 
 export async function now(): Promise<Date> {
-  return new Date(Date.now() + (await getOffset()));
-}
-
-export async function fastForward(days: number): Promise<Date> {
-  const offset = (await getOffset()) + days * MS_DAY;
-  await db.setting.upsert({ where: { key: KEY }, update: { value: String(offset) }, create: { key: KEY, value: String(offset) } });
-  return new Date(Date.now() + offset);
-}
-
-export async function resetClock() {
-  await db.setting.deleteMany({ where: { key: KEY } });
+  if (!legacyCleaned) {
+    legacyCleaned = true;
+    await db.setting.deleteMany({ where: { key: "clockOffsetMs" } }).catch(() => {});
+  }
+  return new Date();
 }

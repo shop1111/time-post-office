@@ -265,6 +265,6 @@ describe("finalize with isolated SQLite", () => {
     const entry = await create();
     const response = await GET(new Request("http://test/finalize"), context(entry.id));
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "这条记录还没有收进邮局任务", code: "JOB_NOT_FOUND", retryable: false });
+    expect(await response.json()).toEqual({ error: "这颗胶囊还没有整理任务", code: "JOB_NOT_FOUND", retryable: false });
   });
 });
