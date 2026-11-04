@@ -1,10 +1,11 @@
+import { userPage } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { categoryItems, findCategory } from "@/lib/memory/map";
 import { CategoryList } from "@/components/memory/CategoryList";
 
-export default async function MemoryCategoryPage({ params }: { params: Promise<{ category: string }> }) {
+async function MemoryCategoryPage({ params }: { params: Promise<{ category: string }> }) {
   const { category: id } = await params;
   const category = findCategory(id);
   if (!category) notFound();
@@ -15,3 +16,5 @@ export default async function MemoryCategoryPage({ params }: { params: Promise<{
     count: item.memories.length, latest: item.latest.toISOString(), themes: item.themes,
   }))} />;
 }
+
+export default userPage(MemoryCategoryPage);

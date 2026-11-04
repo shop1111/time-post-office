@@ -9,3 +9,7 @@ data/uploads/*
 next-env.d.ts
 *.tsbuildinfo
 .claude/
+data/users/
+data/*.db-wal
+data/*.db-shm
+data/*.adopted-*

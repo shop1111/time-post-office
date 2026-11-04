@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -12,7 +13,7 @@ import { ScoreBreakdown } from "@/components/memory/ScoreBreakdown";
 import { fmtCN, fmtTime, photoUrl, moodEmoji } from "@/lib/utils";
 import { KIND_LABEL, type MemoryKind } from "@/lib/types";
 
-export default async function CapsulePage({ params }: { params: Promise<{ id: string }> }) {
+async function CapsulePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const entry = await db.entry.findUnique({
     where: { id },
@@ -126,3 +127,5 @@ export default async function CapsulePage({ params }: { params: Promise<{ id: st
     </div>
   );
 }
+
+export default userPage(CapsulePage);

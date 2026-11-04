@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Lock } from "lucide-react";
@@ -6,7 +7,7 @@ import { LetterView } from "@/components/LetterView";
 import { fmtCN } from "@/lib/utils";
 import type { LetterKnowledge } from "@/lib/types";
 
-export default async function LetterPage({ params }: { params: Promise<{ id: string }> }) {
+async function LetterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const l = await db.letter.findUnique({ where: { id }, include: { correspondent: true } });
   if (!l) notFound();
@@ -71,3 +72,5 @@ function BackLink() {
     </Link>
   );
 }
+
+export default userPage(LetterPage);

@@ -1,9 +1,10 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { MemoryList } from "@/components/memory/MemoryList";
 
-export default async function ManageMemoryPage() {
+async function ManageMemoryPage() {
   const memories = await db.memory.findMany({
     orderBy: { occurredAt: "desc" },
     include: { entities: { include: { entity: true } } },
@@ -42,3 +43,5 @@ export default async function ManageMemoryPage() {
     </div>
   );
 }
+
+export default userPage(ManageMemoryPage);

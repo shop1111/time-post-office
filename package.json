@@ -8,8 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "db:push": "prisma db push",
+    "start:server": "node scripts/db-sync.mjs && next start",
+    "db:push": "node scripts/db-sync.mjs",
     "seed": "tsx prisma/seed/index.ts",
+    "user:adopt-legacy": "tsx scripts/adopt-legacy.ts",
     "eval:curator": "tsx --env-file=.env scripts/eval-curator.ts"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
@@ -7,7 +8,7 @@ import { LetterComposer } from "@/components/LetterComposer";
 
 const ORDER: Record<string, number> = { person: 0, parallel_self: 1, future_self: 2, curator: 3 };
 
-export default async function WritePage({ searchParams }: { searchParams: Promise<{ to?: string }> }) {
+async function WritePage({ searchParams }: { searchParams: Promise<{ to?: string }> }) {
   const { to } = await searchParams;
   const t = await now();
   await ensureSystemCorrespondents();
@@ -23,3 +24,5 @@ export default async function WritePage({ searchParams }: { searchParams: Promis
     </div>
   );
 }
+
+export default userPage(WritePage);

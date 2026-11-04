@@ -1,3 +1,5 @@
+import { getSessionUser, userPage } from "@/lib/auth";
+import { LogoutButton } from "@/components/LogoutButton";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { Download } from "lucide-react";
@@ -13,14 +15,14 @@ import { CAPSULE_WHERE } from "@/lib/capsules";
 import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 
-export default async function Settings() {
+async function Settings() {
   const st = providerStatus();
   const localModels = canConfigureModels((await headers()).get("host"));
   const overrides = localModels ? Object.fromEntries(MODEL_ROLES.map((role) => {
     const config = getLocalModel(role);
     return [role, config && { baseUrl: config.baseUrl, model: config.model }];
   })) : {};
-  const profile = await getProfile();
+  const [profile, user] = await Promise.all([getProfile(), getSessionUser()]);
   const [entries, memories, letters, instant] = await Promise.all([db.entry.count({ where: CAPSULE_WHERE }), db.memory.count({ where: ACTIVE_MEMORY }), db.letter.count(), instantReplies()]);
   // 有数据时导入示例才需要确认（会替换现有数据）
   const hasData = entries + memories + letters > 0;
@@ -33,6 +35,14 @@ export default async function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="font-hand text-3xl">设置</h1>
+
+      <section className="card flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h2 className="font-hand text-xl">账号</h2>
+          <p className="mt-1 text-sm text-ink-2">当前登录：<span className="font-mono">{user?.username}</span>。你的胶囊、记忆和信件单独保存，其他账号看不到。</p>
+        </div>
+        <LogoutButton />
+      </section>
 
       <section className="card p-5">
         <h2 className="font-hand text-xl">称呼</h2>
@@ -86,7 +96,7 @@ export default async function Settings() {
       <section className="card p-5">
         <h2 className="font-hand text-xl">数据</h2>
         <p className="mt-1 text-sm text-ink-2">
-          {entries} 颗胶囊 · {memories} 条记忆 · {letters} 封信。所有数据保存在本地 SQLite，不会上传到除你配置的模型以外的任何地方。
+          {entries} 颗胶囊 · {memories} 条记忆 · {letters} 封信。数据保存在这台服务器上属于你账号的独立数据库里，除了用来理解和写信的模型服务，不会发给其他任何地方。
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <a href="/api/export" className="btn btn-ghost">
@@ -106,3 +116,5 @@ export default async function Settings() {
     </div>
   );
 }
+
+export default userPage(Settings);

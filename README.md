@@ -13,11 +13,13 @@
 ```bash
 npm install
 cp .env.example .env      # 不填 Key 也能跑（本地演示模式）
-npx prisma db push
+npm run db:push          # 建好账号库和新用户模板（改了 schema 后也用它同步所有用户库）
 npm run dev
 ```
 
-打开 http://localhost:3000 ，在首页或 **设置 → 示例数据** 点「导入示例数据」，就能看到「林小满在杭州的半年」。也可以用 `npm run seed` 从命令行导入。
+打开 http://localhost:3000 ，先注册一个账号，然后在首页或 **设置 → 示例数据** 点「导入示例数据」，就能看到「林小满在杭州的半年」。也可以用 `npm run seed -- <用户名>` 从命令行导入。
+
+多人使用：每个账号有自己独立的数据库和上传目录，互不可见。部署到服务器（Docker / Node、Nginx、HTTPS、邀请码、备份、从单用户版本迁移）见 [docs/DEPLOY.md](docs/DEPLOY.md)。
 
 接入真实模型：在 `.env` 里填 `CHAT_API_KEY`（DeepSeek），重启即可。看图、向量、语音各自独立配置，见 [.env.example](.env.example)。本地开发时把 `ENABLE_LOCAL_MODEL_SETTINGS` 设为 `1`，可以直接在设置页临时切换模型（重启后恢复，公开部署请保持关闭）。
 
@@ -142,10 +144,11 @@ tests/                vitest
 docs/                 设计说明与演示脚本
 ```
 
-数据全部存在本地 `data/app.db`，上传的照片和语音在 `data/uploads/`，可在设置页一键导出 JSON。
+账号在 `data/auth.db`；每个账号的数据在 `data/users/<用户id>/app.db`，上传的照片和语音在同目录的 `uploads/`，可在设置页一键导出 JSON。
 
 ## 文档
 
+- [docs/DEPLOY.md](docs/DEPLOY.md) — 部署到服务器、多用户与数据隔离
 - [docs/DEMO.md](docs/DEMO.md) — 演示脚本
 - [docs/CURATOR.md](docs/CURATOR.md) — 小局的人设、对话策略、防御层与评测
 - [docs/MEMORY_CONTROL.md](docs/MEMORY_CONTROL.md) — 记忆更正与撤回

@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { now } from "@/lib/clock";
@@ -5,7 +6,7 @@ import { assertPast, TimeRuleError } from "@/lib/time-rules";
 
 export const runtime = "nodejs";
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const c = await db.correspondent.findUnique({ where: { id } });
   if (!c) return NextResponse.json({ error: "找不到这位收件人" }, { status: 404 });
@@ -32,7 +33,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** 删除收件人，连同和TA的往来信件 */
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const c = await db.correspondent.findUnique({ where: { id } });
   if (!c) return NextResponse.json({ error: "找不到这位收件人" }, { status: 404 });
@@ -40,3 +41,6 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   await db.correspondent.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withUser(handlePATCH);
+export const DELETE = withUser(handleDELETE);

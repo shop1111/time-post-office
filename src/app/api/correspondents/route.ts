@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { now } from "@/lib/clock";
@@ -6,14 +7,14 @@ import { assertPast, TimeRuleError } from "@/lib/time-rules";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+async function handleGET() {
   await ensureSystemCorrespondents();
   const list = await db.correspondent.findMany({ orderBy: { createdAt: "asc" } });
   return NextResponse.json({ correspondents: list });
 }
 
 /** 新建收件人：某个人 / 平行时空的自己。小局和未来的我是固定的 */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const b = (await req.json().catch(() => ({}))) as { kind?: string; name?: string; relation?: string; moment?: string; momentAt?: string; voice?: string };
   const kind = b.kind === "parallel_self" ? "parallel_self" : b.kind === "person" ? "person" : null;
   if (!kind) return NextResponse.json({ error: "只能新建「某个人」或「平行时空的自己」" }, { status: 400 });
@@ -40,3 +41,6 @@ export async function POST(req: Request) {
   });
   return NextResponse.json({ correspondent: c });
 }
+
+export const GET = withUser(handleGET);
+export const POST = withUser(handlePOST);

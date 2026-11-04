@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    # 密钥写在 .env 里（从 .env.example 复制），不要提交到 git
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    ports:
+      - "3000:3000"
+    volumes:
+      # 所有账号、胶囊、信件、照片都在这里，记得定期备份
+      - ./data:/app/data

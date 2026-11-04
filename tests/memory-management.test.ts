@@ -13,6 +13,8 @@ vi.mock("@/lib/db", () => ({
     try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
   },
 }));
+// 路由的登录校验由 withUser 负责；这里直接测业务逻辑
+vi.mock("@/lib/auth", () => ({ withUser: <T>(handler: T) => handler }));
 vi.mock("@/lib/ai/json", () => ({ chatJson: vi.fn(async (_schema, _messages, opts) => opts.mock()) }));
 vi.mock("@/lib/ai/provider", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/ai/provider")>();

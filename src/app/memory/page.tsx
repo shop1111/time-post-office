@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -9,7 +10,7 @@ import { MemoryArt, categoryIcons } from "@/components/memory/MemoryArt";
 import { CategoryLink } from "@/components/memory/CategoryLink";
 import { RefreshProfile } from "@/components/memory/RefreshProfile";
 
-export default async function MemoryPage() {
+async function MemoryPage() {
   const [profile, memories] = await Promise.all([
     getProfile(),
     db.memory.findMany({
@@ -98,3 +99,5 @@ function Row({ k, v }: { k: string; v: string }) {
     </div>
   );
 }
+
+export default userPage(MemoryPage);

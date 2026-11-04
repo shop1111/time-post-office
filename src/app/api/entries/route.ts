@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { saveUpload } from "@/lib/files";
@@ -9,7 +10,7 @@ import { assertPast, clampToNow, TimeRuleError } from "@/lib/time-rules";
 export const runtime = "nodejs";
 
 /** 放一颗胶囊：照片 / 语音 / 文字（multipart）。时间只能是已经发生的 */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const form = await req.formData();
   const type = String(form.get("type") ?? "text");
   const text = String(form.get("text") ?? "").trim();
@@ -62,3 +63,5 @@ export async function POST(req: Request) {
   });
   return NextResponse.json({ entry });
 }
+
+export const POST = withUser(handlePOST);

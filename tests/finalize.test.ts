@@ -24,6 +24,8 @@ vi.mock("@/lib/db", async () => {
   fixture.client = new PrismaClient({ datasources: { db: { url: fixture.url } } });
   return { db: fixture.client, parseJson: <T>(value: string | null, fallback: T): T => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } } };
 });
+// 路由的登录校验由 withUser 负责；这里直接测业务逻辑
+vi.mock("@/lib/auth", () => ({ withUser: <T>(handler: T) => handler }));
 vi.mock("@/lib/memory/extract", async (original) => {
   const actual = await original<typeof import("@/lib/memory/extract")>();
   return { ...actual, extractEntry: vi.fn(actual.extractEntry) };

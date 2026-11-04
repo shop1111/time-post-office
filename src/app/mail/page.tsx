@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { Lock, PenLine, Plus } from "lucide-react";
 import { db } from "@/lib/db";
@@ -15,7 +16,7 @@ const TABS = [
   { k: "people", label: "收件人" },
 ] as const;
 
-export default async function Mail({ searchParams }: { searchParams: Promise<{ tab?: string; category?: string }> }) {
+async function Mail({ searchParams }: { searchParams: Promise<{ tab?: string; category?: string }> }) {
   const { tab: raw, category } = await searchParams;
   const tab = TABS.some((t) => t.k === raw) ? raw! : "inbox";
   const t = await now();
@@ -147,3 +148,5 @@ export default async function Mail({ searchParams }: { searchParams: Promise<{ t
     </div>
   );
 }
+
+export default userPage(Mail);

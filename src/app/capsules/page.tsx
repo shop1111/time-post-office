@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { ArrowRight, Mic, PenLine, Camera, Plus } from "lucide-react";
 import { db } from "@/lib/db";
@@ -7,7 +8,7 @@ import { CAPSULE_WHERE } from "@/lib/capsules";
 import { StoryCard } from "@/components/StoryCard";
 import { cn, fmtCN, monthKey, moodColor, moodEmoji, photoUrl } from "@/lib/utils";
 
-export default async function Capsules({ searchParams }: { searchParams: Promise<{ tag?: string }> }) {
+async function Capsules({ searchParams }: { searchParams: Promise<{ tag?: string }> }) {
   const { tag } = await searchParams;
   const t = await now();
   const visibleCapsules = { ...CAPSULE_WHERE, occurredAt: { lte: t } };
@@ -117,3 +118,5 @@ export default async function Capsules({ searchParams }: { searchParams: Promise
     </div>
   );
 }
+
+export default userPage(Capsules);
