@@ -3,11 +3,12 @@ import { DEFAULT_WEIGHTS } from "@/lib/memory/rank";
 import { ANNIVERSARY_MILESTONES } from "@/lib/postman/triggers";
 
 const PIPE = [
-  { t: "记录", d: "照片 · 语音 · 日记", s: "EXIF 时间/GPS → 离线逆地理编码；前端压缩；Web Speech 实时转写；视觉模型看图" },
-  { t: "追问", d: "SSE 流式对话", s: "先检索相关旧记忆，自然地「想起」过去；3 轮后收尾" },
+  { t: "胶囊", d: "照片 · 语音 · 文字", s: "EXIF 时间/GPS → 离线逆地理编码；前端压缩；Web Speech 实时转写；视觉模型看图" },
+  { t: "追问", d: "SSE 流式对话", s: "小局先检索相关旧记忆，自然地「想起」过去；3 轮后收尾" },
   { t: "抽取", d: "结构化记忆", s: "LLM + zod 校验 + 自动修复重试；事件/人物/地点/计划/心愿/喜好，带重要度与到期日" },
   { t: "记忆", d: "向量 + 实体图谱", s: "向量写入 SQLite；实体去重合并；画像与文风指纹持续演化" },
-  { t: "小局", d: "主动来信", s: "触发器打分 → 频控 → 检索 → 模仿口吻写信 → 事实自检 → 投递" },
+  { t: "邮件", d: "代笔回信", s: "你写给某个人 / 平行时空的自己的信 → 几小时到一天后 → 检索 → 推理 TA 知道什么 → 以 TA 的身份写信 → 越界核查 → 投递" },
+  { t: "小局", d: "主动来信", s: "触发器打分 → 频控 → 检索 → 写信 → 事实自检 → 投递" },
 ];
 
 export default function About() {
@@ -17,7 +18,7 @@ export default function About() {
       <header>
         <h1 className="font-hand text-4xl">它是怎么工作的</h1>
         <p className="mt-3 text-[15px] leading-8 text-ink-2">
-          小局是时光邮局里<strong>会慢慢认识你</strong>的伙伴。小局把你寄来的生活整理成可检索的长期记忆，并由一个「邮差引擎」决定在什么时候、以谁的口吻给你写信。
+          时光邮局不是一个日记本，而是一个<strong>会慢慢认识你</strong>的 AI 伙伴。它把你放进来的胶囊整理成可检索的长期记忆；你写给别人的信，会由 agent 以收件人的身份代笔回信；邮局主理人小局会在合适的时候主动给你写信。
         </p>
       </header>
 
@@ -47,19 +48,19 @@ export default function About() {
           <p className="mt-2 text-sm leading-6 text-ink-2">参考 Generative Agents：语义相似、时间衰减、重要度、实体重合四路加权，再用 MMR 去重保证多样性。回顾往事时切换为「怀旧权重」，弱化新近性。每次被想起都会记录 recallCount。</p>
         </div>
         <div className="card p-5">
-          <h3 className="font-hand text-xl">邮差引擎 · 触发器</h3>
+          <h3 className="font-hand text-xl">小局什么时候来信</h3>
           <ul className="mt-2 space-y-1.5 text-sm leading-6 text-ink-2">
             <li>📅 周年回顾：{ANNIVERSARY_MILESTONES.map((m) => m.label).join(" / ")}的重要时刻</li>
-            <li>🧵 未完结线索：计划/考试到期后，「过去的你」来问结果；回信即闭环</li>
-            <li>🌧 情绪关怀：一周情绪均值偏低，「未来的你」来信，并找回一段明亮的旧时光</li>
-            <li>🏅 里程碑：记录数、某个人反复出现</li>
-            <li>💌 时间胶囊：你写给未来的信按期送达</li>
+            <li>🧵 惦记的事：计划/考试到期后，小局来问结果；回信即闭环</li>
+            <li>🌧 情绪关怀：一周情绪均值偏低，小局来信安慰，并找回一段明亮的旧时光</li>
+            <li>🏅 里程碑：胶囊数、某个人反复出现</li>
+            <li>👋 随手问候：隔几天随机挑一颗最近的胶囊或一封你寄出的信来问候你</li>
           </ul>
           <p className="mt-2 text-xs text-ink-3">优先级排序 + 20 小时频控 + 去重键，避免打扰。</p>
         </div>
         <div className="card p-5">
-          <h3 className="font-hand text-xl">像你本人的口吻</h3>
-          <p className="mt-2 text-sm leading-6 text-ink-2">本地统计你的「文风指纹」：句长、口头禅、句尾语气词、标点习惯、代表性原句，转成写作指令。「过去的你」只允许看到写信那天之前的记忆，保证时间线一致。</p>
+          <h3 className="font-hand text-xl">代笔回信的真实感</h3>
+          <p className="mt-2 text-sm leading-6 text-ink-2">写给某个人：先检索相关的胶囊记忆，再让模型以 TA 的身份逐条判断「TA 会不会知道」，只用 TA 知道的事和往来信件写信，最后核查有没有越界。写给平行时空的自己：只能看到分岔点之前的真实记忆，并用你的「文风指纹」保持口吻。写给未来自己的信不会被代写，到那天由真实的你收到。</p>
         </div>
         <div className="card p-5">
           <h3 className="font-hand text-xl">不编造 · 可解释 · 可控</h3>

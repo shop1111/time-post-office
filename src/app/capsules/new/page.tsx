@@ -13,7 +13,7 @@ export default async function RecordPage({ searchParams }: { searchParams: Promi
   return <RecordFlow initialType={initial} today={t.toISOString()} resume={resume} />;
 }
 
-/** 刷新 /record?entry=... 时接着上次：还在追问就恢复对话，已经在收进邮局就接上进度 */
+/** 刷新 /capsules/new?entry=... 时接着上次：还在追问就恢复对话，已经在收进邮局就接上进度 */
 async function loadResume(id: string): Promise<ResumeState | null> {
   const entry = await db.entry.findUnique({ where: { id }, include: { messages: { orderBy: { createdAt: "asc" } } } });
   if (!entry) return null;
@@ -22,7 +22,7 @@ async function loadResume(id: string): Promise<ResumeState | null> {
     throw e;
   });
   // 早先已经整理好的旧记录没有任务可接，直接去详情页
-  if (!job && entry.interviewDone) redirect(`/entry/${id}`);
+  if (!job && entry.interviewDone) redirect(`/capsules/${id}`);
   return {
     entry: {
       id,

@@ -67,7 +67,7 @@ export function MemoryGraph({ data }: { data: GraphData }) {
         linkColor={() => (dark ? "rgba(255,255,255,0.12)" : "rgba(80,60,40,0.15)")}
         linkWidth={(l) => Math.min(4, 0.5 + Number(l.value) * 0.6)}
         onNodeClick={(n) => {
-          if (n.type !== "me") router.push(`/timeline?tag=${encodeURIComponent(String(n.name))}`);
+          if (n.type !== "me") router.push(`/capsules?tag=${encodeURIComponent(String(n.name))}`);
         }}
         nodeCanvasObject={(node, ctx, scale) => {
           const r = Math.sqrt(Number(node.val)) * 3;

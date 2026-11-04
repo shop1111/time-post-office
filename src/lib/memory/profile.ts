@@ -74,7 +74,7 @@ export async function refreshProfile() {
           prefs: memories.filter((m) => m.kind === "preference").map((m) => m.content),
         }),
     },
-  ) : { summary: "还没有可用于画像的有效记忆。你可以继续记录生活，邮差会慢慢认识你。", traits: [] };
+  ) : { summary: "还没有可用于画像的有效记忆。你可以继续放胶囊，小局会慢慢认识你。", traits: [] };
 
   await db.$transaction(async (tx) => {
     await assertDerivedRevision(tx, revision);

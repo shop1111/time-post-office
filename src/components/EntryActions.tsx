@@ -18,10 +18,10 @@ export function EntryActions({ id, hasCard }: { id: string; hasCard: boolean }) 
     router.refresh();
   }
   async function remove() {
-    if (!confirm("删除后，这条记录和小局从中记住的事都会被忘掉。确定吗？")) return;
+    if (!confirm("删除后，这颗胶囊和小局从中记住的事都会被忘掉。确定吗？")) return;
     setBusy("del");
     await fetch(`/api/entries/${id}`, { method: "DELETE" });
-    router.push("/timeline");
+    router.push("/capsules");
     router.refresh();
   }
   return (
@@ -30,7 +30,7 @@ export function EntryActions({ id, hasCard }: { id: string; hasCard: boolean }) 
         <RefreshCw size={14} className={busy === "card" ? "animate-spin" : ""} /> {hasCard ? "重写故事卡片" : "生成故事卡片"}
       </button>
       <button className="btn btn-ghost !text-stamp" onClick={remove} disabled={!!busy}>
-        <Trash2 size={14} /> 删除这条记录
+        <Trash2 size={14} /> 删除这颗胶囊
       </button>
     </div>
   );

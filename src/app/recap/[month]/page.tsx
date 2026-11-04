@@ -16,8 +16,8 @@ export default async function RecapPage({ params }: { params: Promise<{ month: s
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between">
-        <Link href="/timeline" className="inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
-          <ArrowLeft size={14} /> 时间线
+        <Link href="/capsules" className="inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
+          <ArrowLeft size={14} /> 胶囊
         </Link>
         <div className="flex items-center gap-1 text-sm">
           <Link href={`/recap/${shift(month, -1)}`} className="rounded-full p-1.5 hover:bg-card" aria-label="上个月">

@@ -1,8 +1,9 @@
 /**
  * 示例人生：林小满，27 岁，在杭州做 UI 设计师，养了一只叫「年糕」的猫，在学胶片摄影。
- * 时间全部相对「现在」计算，保证任何时候载入都能演示：
- *  - 刚载入：最近一周情绪低落 → 「未来的你」来信
- *  - 时光快进 7 天：大理旅行满 90 天 → 「过去的你」回顾来信；认证考试到期 → 追问结果；时间胶囊送达
+ * 时间全部相对「现在」计算，保证任何时候载入都能演示（不需要快进时间）：
+ *  - 刚载入：最近一周情绪低落 → 小局来信安慰；半年前写给未来自己的信今天送达
+ *  - 之后几天：大理旅行刚满 90 天、认证考试昨天到期 → 小局会陆续来信回顾、追问结果
+ *  - 收件人「小鹿」：有一组往来信件，还有一封回信正在路上
  */
 import type { EntityType, MemoryKind } from "@/lib/types";
 
@@ -33,7 +34,7 @@ export interface DemoEntry {
   card?: { title: string; narrative: string; quote: string; template?: string };
 }
 
-export const EXAM_IN_DAYS = 4;
+export const EXAM_IN_DAYS = -1;
 
 const ME: Ent = ["年糕", "person"];
 const MOM: Ent = ["妈妈", "person"];
@@ -132,13 +133,13 @@ export const DEMO_ENTRIES: DemoEntry[] = [
     memories: [{ kind: "event", content: "第一卷胶卷洗出来，36 张里只有 5 张能看，但很喜欢", importance: 6, entities: [PHOTO, ME] }],
   },
   {
-    key: "planDali", daysAgo: 96, hour: 23, type: "text",
+    key: "planDali", daysAgo: 99, hour: 23, type: "text",
     text: "订好票了！下周和阿哲去大理！要带上胶片相机，拍洱海的日出。",
     mood: 0.8, emotions: ["期待"], title: "要去大理啦", summary: "和阿哲约好下周去大理旅行，计划拍洱海日出。",
-    memories: [{ kind: "plan", content: "下周和阿哲去大理，计划拍洱海日出", importance: 7, entities: [ZHE, DL, EH], dueInDays: -88, resolved: true }],
+    memories: [{ kind: "plan", content: "下周和阿哲去大理，计划拍洱海日出", importance: 7, entities: [ZHE, DL, EH], dueInDays: -92, resolved: true }],
   },
   {
-    key: "erhai", daysAgo: 86, hour: 6, type: "photo", place: "洱海", scene: "erhai-sunrise",
+    key: "erhai", daysAgo: 91, hour: 6, type: "photo", place: "洱海", scene: "erhai-sunrise",
     caption: "清晨的湖面被染成橘粉色，太阳刚从远山后升起，湖边有一根木桩和一只小船。",
     text: "五点半爬起来等日出。太阳出来那一刻，整个洱海都变成粉色的了！阿哲在旁边一直说「快拍快拍」，我手都在抖。这是我见过最好看的日出。",
     mood: 0.95, emotions: ["惊艳", "幸福", "自由"], title: "洱海·粉色的日出", summary: "和阿哲在洱海边等到了日出，整个湖面变成粉色，是见过最美的日出。",
@@ -151,12 +152,12 @@ export const DEMO_ENTRIES: DemoEntry[] = [
       ["user", "和阿哲！他比我还激动哈哈哈。我在想，要是能一直这样就好了。"],
       ["assistant", "「要是能一直这样就好了」——这句话好珍贵。有没有一个小细节，是你特别不想忘掉的？"],
       ["user", "他把外套披在我身上，然后自己冻得一直跺脚。"],
-      ["assistant", "外套和跺脚的阿哲，我记住了。谢谢你愿意把这些讲给我听，洱海的这一页已经好好收进时光邮局了，等哪天你想回来看看，它会一直在这里。"],
+      ["assistant", "外套和跺脚的阿哲，我记住了。谢谢你愿意把这些讲给我听，洱海的这颗胶囊已经好好收进时光邮局了，等哪天你想回来看看，它会一直在这里。"],
     ],
     card: { title: "粉色的五点四十分", narrative: "天还没亮，湖边的风冷得刺骨。阿哲把外套披在你身上，自己在旁边一直跺脚。然后太阳出来了——先是一道金边，接着整片洱海都被染成了粉色。他在旁边喊「快拍快拍」，你的手在抖，不知道是因为冷，还是因为太美。你在心里悄悄说：要是能一直这样就好了。", quote: "要是能一直这样就好了。", template: "postcard" },
   },
   {
-    key: "cangshan", daysAgo: 85, hour: 19, type: "photo", place: "大理", scene: "cangshan-dusk",
+    key: "cangshan", daysAgo: 90, hour: 19, type: "photo", place: "大理", scene: "cangshan-dusk",
     caption: "黄昏时分，远山层叠，近处是古城的屋檐剪影，亮着暖黄色的灯。",
     text: "在古城的城墙上看苍山日落。阿哲说，以后每年都要一起出来走走。我说好呀，拉钩。",
     mood: 0.9, emotions: ["幸福", "温暖"], title: "大理·古城日落", summary: "在大理古城墙上看苍山日落，和阿哲约定每年一起旅行。",
@@ -167,7 +168,7 @@ export const DEMO_ENTRIES: DemoEntry[] = [
     card: { title: "拉钩", narrative: "城墙的砖还留着白天的温度。苍山的轮廓一层一层地暗下去，古城的灯一盏一盏亮起来。阿哲说，以后每年都要一起出来走走。你说好呀，然后伸出小拇指。很幼稚，但你是认真的。", quote: "以后每年都要一起出来走走。", template: "film" },
   },
   {
-    key: "backhome", daysAgo: 83, hour: 22, type: "text", place: "杭州",
+    key: "backhome", daysAgo: 88, hour: 22, type: "text", place: "杭州",
     text: "回来第一天就开始想念洱海的风了。翻了一晚上照片，其实……有点舍不得回到上班的日子吧。",
     mood: 0.1, emotions: ["思念", "失落"], title: "旅行后遗症", summary: "从大理回来，想念洱海，有点不想回到上班状态。",
     memories: [{ kind: "event", content: "从大理回来后很想念洱海的风，舍不得回去上班", importance: 5, entities: [EH] }],
@@ -251,54 +252,100 @@ export const DEMO_ENTRIES: DemoEntry[] = [
   },
 ];
 
+export interface DemoCorrespondent {
+  key: string;
+  name: string;
+  relation: string;
+  moment: string;
+  momentDaysAgo: number;
+  voice: string;
+}
+
+export const DEMO_CORRESPONDENTS: DemoCorrespondent[] = [
+  {
+    key: "lu",
+    name: "小鹿",
+    relation: "来杭州以后认识的同事，后来成了最好的朋友",
+    moment: "刚来杭州那阵子我谁也不认识，是她周末拉我从断桥骑车到苏堤，我第一次觉得这座城市可以慢下来",
+    momentDaysAgo: 170,
+    voice: "爽朗、话多，爱用感叹号，叫我「满满」",
+  },
+];
+
 export interface DemoLetter {
   key: string | null;
-  sender: "past_self" | "future_self" | "postman" | "user";
+  /** user = 小满写的；curator = 小局；persona = agent 以收件人身份代笔 */
+  sender: "curator" | "persona" | "user";
+  /** 往来的另一方：curator / future_self / 示例收件人的 key */
+  to: string;
   triggerType: string;
   subject: string;
   body: string;
   reason: string;
   writtenDaysAgo: number;
-  deliverDaysAgo: number; // 负数 = 未来送达
+  deliverDaysAgo: number; // 负数 = 未来送达；0 = 刚刚送达
   read: boolean;
+  /** 小满对这封信的回信 */
   reply?: string;
-  citeKeys?: string[]; // 引用哪些记录的记忆
+  citeKeys?: string[]; // 引用哪些胶囊的记忆
+  /** 这是哪封示例信的回信（按 subject 对应） */
+  inReplyTo?: string;
+  /** 小满寄出的信：代笔回信还要多少小时送达 */
+  replyInHours?: number;
 }
 
 export const DEMO_LETTERS: DemoLetter[] = [
   {
-    key: "welcome", sender: "postman", triggerType: "welcome", subject: "欢迎来到时光邮局", writtenDaysAgo: 178, deliverDaysAgo: 178, read: true,
-    reason: "你寄出了第一封生活的信",
-    body: "小满，你好：\n\n我是小局，这里的邮差。从今天起，你寄来的每一张照片、每一段话、每一篇日记，我都会好好保管。\n\n我不会催你每天都写。想起来的时候，随手寄一封就好。等过一阵子，我会时不时给你回信——有时候是我，有时候，是过去或未来的你自己。\n\n新的城市，慢慢来。\n\n—— 小局",
+    key: "welcome", sender: "curator", to: "curator", triggerType: "welcome", subject: "欢迎来到时光邮局", writtenDaysAgo: 178, deliverDaysAgo: 178, read: true,
+    reason: "你放进了第一颗胶囊",
+    body: "小满，你好：\n\n我是时光邮局的主理人，你可以叫我小局。从今天起，你放进来的每一张照片、每一段话、每一行字，我都会好好保管。\n\n我不会催你每天都来。想起来的时候，随手放一颗胶囊就好。想对谁说点什么，也可以写信——写给帮过你的人、写给未来的自己，都可以。\n\n新的城市，慢慢来。\n\n—— 小局",
     citeKeys: ["move"],
   },
   {
-    key: "anniv:bike:30", sender: "postman", triggerType: "anniversary", subject: "还记得西湖边的风吗", writtenDaysAgo: 140, deliverDaysAgo: 140, read: true,
+    key: "anniv:bike:30", sender: "curator", to: "curator", triggerType: "anniversary", subject: "还记得西湖边的风吗", writtenDaysAgo: 140, deliverDaysAgo: 140, read: true,
     reason: "一个月前的今天，你记录了「西湖·和小鹿骑车」",
     body: "小满，见字如面：\n\n一个月前的今天，你和小鹿从断桥骑到了苏堤。你说「原来周末可以这么慢」，还说来杭州以后虽然累，但是自由。\n\n这一个月你过得怎么样？还有在周末慢下来吗？\n\n—— 小局",
     reply: "最近有点忙，但是这周末打算再去骑一次！谢谢你还记得。", citeKeys: ["bike"],
   },
   {
-    key: "mood:seed-1", sender: "future_self", triggerType: "low_mood", subject: "给凌晨两点的你", writtenDaysAgo: 124, deliverDaysAgo: 124, read: true,
-    reason: "那一周你的记录里有些低落",
-    body: "亲爱的小满：\n\n我是几年后的你。我知道你昨晚又失眠了，改了八版的稿子被打回来，你在想自己是不是根本不适合这行。\n\n我想告诉你：你适合的。不是因为你从来不犯错，而是因为你会为了一个像素失眠——这种在意，后来变成了你最好的东西。\n\n今晚早点睡吧。明天去找小鹿，她会懂的。\n\n—— 一直站在前面等你的，未来的你",
+    key: "mood:seed-1", sender: "curator", to: "curator", triggerType: "low_mood", subject: "给凌晨两点的你", writtenDaysAgo: 124, deliverDaysAgo: 124, read: true,
+    reason: "那一周你的胶囊里有些低落",
+    body: "亲爱的小满：\n\n昨晚那颗胶囊我看到了。改了八版的稿子被打回来，你在想自己是不是根本不适合这行。\n\n我没法替你回答这个问题，但我记得你为了一个像素失眠的样子——这种在意，本身就很珍贵。\n\n今晚早点睡吧。明天要是还难受，去找小鹿聊聊，她会懂的。\n\n—— 小局",
     citeKeys: ["insomnia"],
   },
   {
-    key: "count:10", sender: "postman", triggerType: "milestone", subject: "第十封信", writtenDaysAgo: 103, deliverDaysAgo: 103, read: true,
-    reason: "你已经在时光邮局寄存了 10 段生活",
-    body: "小满：\n\n你已经寄来十封生活的信了。我翻了翻：有搬家那天的夕阳，有西湖边的风，有妈妈生日时红了的眼睛，还有第一卷只有 5 张能看的胶卷。\n\n十封信，拼起来就是你在杭州的第一个季节。继续寄吧，我都在。\n\n—— 小局",
+    key: "count:10", sender: "curator", to: "curator", triggerType: "milestone", subject: "第十颗胶囊", writtenDaysAgo: 103, deliverDaysAgo: 103, read: true,
+    reason: "你已经在时光邮局放了 10 颗胶囊",
+    body: "小满：\n\n你已经放进来十颗胶囊了。我翻了翻：有搬家那天的夕阳，有西湖边的风，有妈妈生日时红了的眼睛，还有第一卷只有 5 张能看的胶卷。\n\n十颗胶囊，拼起来就是你在杭州的第一个季节。继续放吧，我都在。\n\n—— 小局",
     citeKeys: ["move", "bike", "mombday", "firstroll"],
   },
   {
-    key: "anniv:erhai:30", sender: "postman", triggerType: "anniversary", subject: "还记得洱海的日出吗", writtenDaysAgo: 56, deliverDaysAgo: 56, read: true,
+    key: "anniv:erhai:30", sender: "curator", to: "curator", triggerType: "anniversary", subject: "还记得洱海的日出吗", writtenDaysAgo: 61, deliverDaysAgo: 61, read: true,
     reason: "一个月前的今天，你记录了「洱海·粉色的日出」",
     body: "小满，见字如面：\n\n一个月前的清晨五点四十，你在洱海边看到了你见过最好看的日出。阿哲把外套披在你身上，自己冻得一直跺脚。你在心里说：要是能一直这样就好了。\n\n回到杭州一个月了，那天的粉色还留在你心里吗？\n\n—— 小局",
     reply: "留着呢。我打算把那天的照片洗出来做成相册，给阿哲当生日礼物！", citeKeys: ["erhai"],
   },
   {
-    key: null, sender: "user", triggerType: "capsule", subject: "给半年后的自己", writtenDaysAgo: 150, deliverDaysAgo: -5, read: false,
-    reason: "这是你在半年前写给未来自己的时间胶囊",
+    key: null, sender: "user", to: "lu", triggerType: "letter", subject: "谢谢你那天拉我去骑车", writtenDaysAgo: 30, deliverDaysAgo: 30, read: true,
+    reason: "你写给小鹿的信",
+    body: "小鹿：\n\n突然想写封信给你。还记得我刚来杭州那阵子吗？谁也不认识，周末就窝在家里。是你拉我从断桥骑到苏堤，那天我第一次觉得这座城市可以慢下来。\n\n上周你陪我看摄影展，说下一次就是我的展了，我回家想了很久。谢谢你一直在。\n\n—— 满满",
+  },
+  {
+    key: null, sender: "persona", to: "lu", triggerType: "reply", subject: "满满！！", writtenDaysAgo: 29, deliverDaysAgo: 29, read: true,
+    inReplyTo: "谢谢你那天拉我去骑车",
+    reason: "你在 30 天前给小鹿寄了一封信。这封回信由 agent 以小鹿的身份代笔，只用了小鹿会知道的事。",
+    body: "满满：\n\n收到信的时候我在工位上差点哭出来！你知道吗，那天骑车其实是我自己也想偷懒，顺便把你拐出来哈哈。\n\n摄影展那句话我是认真的！你拍年糕的那几张我到现在还存在手机里。下次你要是真的办展，我负责帮你搬画框！\n\n最近忙不忙？有空再一起去骑车吧！\n\n—— 小鹿",
+    citeKeys: ["bike", "exhibition"],
+  },
+  {
+    key: null, sender: "user", to: "lu", triggerType: "letter", subject: "最近有点撑不住", writtenDaysAgo: 0, deliverDaysAgo: 0, read: true,
+    reason: "你写给小鹿的信",
+    body: "小鹿：\n\n这两天有点撑不住。项目上线前一直失眠，昨天在公司被说设计不够细，回家路上没忍住哭了。\n\n不是想让你安慰我，就是想找个人说说。周末有空的话，陪我去西湖边走走吧。\n\n—— 满满",
+    replyInHours: 3,
+  },
+  {
+    key: null, sender: "user", to: "future_self", triggerType: "future_letter", subject: "给半年后的自己", writtenDaysAgo: 150, deliverDaysAgo: 0, read: false,
+    reason: "这是你在半年前写给未来自己的信",
     body: "半年后的小满：\n\n今天刚买了胶片相机，好开心呀。不知道你现在还有没有在拍照？摄影展的梦想还记得吗？\n\n如果你现在很累，那就停下来，去西湖边走走吧。如果你现在很好，那就替我多拍几张照片。\n\n不管怎样，别忘了你为什么来杭州。\n\n—— 150 天前的你",
   },
 ];

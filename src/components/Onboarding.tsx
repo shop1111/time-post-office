@@ -12,7 +12,7 @@ export function Onboarding() {
   const router = useRouter();
   async function saveName() {
     if (name.trim()) await fetch("/api/profile", { method: "PATCH", body: JSON.stringify({ name }) });
-    router.push("/record");
+    router.push("/capsules/new");
   }
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center pt-8 text-center md:pt-16">
@@ -21,11 +21,11 @@ export function Onboarding() {
       </motion.div>
       <h1 className="mt-6 font-hand text-4xl">欢迎来到时光邮局</h1>
       <p className="mt-4 text-[15px] leading-8 text-ink-2">
-        把生活寄存在这里——一张照片、一段语音、几行日记。
+        把生活放进<span className="text-stamp">胶囊</span>——一张照片、一段语音、几行文字。
         <br />
-        小局会好奇地问你那天发生了什么，慢慢记住你的故事，
+        也可以<span className="text-post">写信</span>给某个瞬间帮过你的人、未来的自己，或者平行时空的自己。
         <br />
-        然后在未来的某一天，替<span className="text-stamp">过去的你</span>、<span className="text-post">未来的你</span>给你写一封信。
+        邮局主理人小局会慢慢记住你的故事，时不时给你来信。
       </p>
 
       <div className="card mt-8 w-full p-5 text-left">
@@ -33,7 +33,7 @@ export function Onboarding() {
         <div className="mt-2 flex gap-2">
           <input className="input" placeholder="你的名字或昵称" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveName()} />
           <button className="btn btn-primary" onClick={saveName}>
-            寄出第一封
+            放第一颗胶囊
           </button>
         </div>
       </div>

@@ -239,7 +239,7 @@ export function subscribeFinalize(run: Run, reused: boolean, writer: SSEWriter) 
 export async function getFinalizeStatus(entryId: string): Promise<FinalizeStatusResponse> {
   if (!await db.entry.findUnique({ where: { id: entryId }, select: { id: true } })) throw new JobRequestError(404, "ENTRY_NOT_FOUND", "找不到这条记录");
   let job = await db.job.findFirst({ where: { kind: "finalize", targetId: entryId }, orderBy: { createdAt: "desc" } });
-  if (!job) throw new JobRequestError(404, "JOB_NOT_FOUND", "这条记录还没有收进邮局任务");
+  if (!job) throw new JobRequestError(404, "JOB_NOT_FOUND", "这颗胶囊还没有整理任务");
   if ((job.status === "running" || job.status === "queued") && !runs.has(entryId)) {
     // 进程重启不等同于浏览器断连：告知可重试，不能永远显示 running。
     // 读取后任务可能恰好完成，比较状态和版本，不能把新的 completed 覆盖为 failed。

@@ -23,7 +23,7 @@ export default async function MemoryPage() {
   return (
     <div className="space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-hand text-3xl">记忆宫殿</h1>
+        <h1 className="font-hand text-3xl">记忆</h1>
         <Link href="/memory/manage" className="btn btn-ghost text-sm">
           记忆管理 <ArrowRight size={14} />
         </Link>
@@ -47,7 +47,7 @@ export default async function MemoryPage() {
         </div>
         <div className="card p-5 md:col-span-2">
           <h2 className="font-hand text-xl">你的文风指纹</h2>
-          <p className="mt-1 text-xs text-ink-3">从你写下的文字中本地统计，用于让「过去 / 未来的你」写信时像你本人。</p>
+          <p className="mt-1 text-xs text-ink-3">从你写下的文字中本地统计，用于让平行时空的你写信时像你本人。</p>
           {style ? (
             <dl className="mt-3 space-y-2 text-sm">
               <Row k="平均句长" v={`${style.avgSentenceLen} 字`} />

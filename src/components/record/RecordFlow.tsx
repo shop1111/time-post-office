@@ -30,7 +30,7 @@ interface Msg {
   failed?: StreamError & { retry?: string };
 }
 
-/** 刷新页面后接着上次的进度：由 /record?entry=... 的服务端页面查好传进来 */
+/** 刷新页面后接着上次的进度：由 /capsules/new?entry=... 的服务端页面查好传进来 */
 export interface ResumeState {
   entry: { id: string; type: Kind; text: string; place: string | null; occurredAt: string; photoPath: string | null };
   messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -47,7 +47,7 @@ type RoundOutcome = { kind: "done" } | { kind: "limit" } | { kind: "aborted" } |
 const TABS: Array<{ k: Kind; label: string; icon: typeof Camera }> = [
   { k: "photo", label: "照片", icon: Camera },
   { k: "voice", label: "语音", icon: Mic },
-  { k: "text", label: "日记", icon: PenLine },
+  { k: "text", label: "文字", icon: PenLine },
 ];
 
 function toLocalInput(d: Date) {
@@ -99,8 +99,11 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 只能选已经发生的时间
+  const maxWhen = toLocalInput(new Date(today));
   useEffect(() => {
-    if (photo?.exifTime) setWhen(toLocalInput(photo.exifTime));
+    // 相机时钟不准时，EXIF 可能晚于现在：截断到现在
+    if (photo?.exifTime) setWhen(toLocalInput(photo.exifTime.getTime() > Date.now() ? new Date() : photo.exifTime));
     if (photo?.place && !place) setPlace(photo.place);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photo]);
@@ -136,8 +139,8 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
       return;
     }
     setEntryId(data.entry.id);
-    // 记下这条记录，刷新页面也能接着追问或看到整理进度
-    window.history.replaceState(null, "", `/record?entry=${data.entry.id}`);
+    // 记下这颗胶囊，刷新页面也能接着追问或看到整理进度
+    window.history.replaceState(null, "", `/capsules/new?entry=${data.entry.id}`);
     sendTimer.current = setTimeout(() => {
       setStage("interview");
       ask(data.entry.id);
@@ -266,13 +269,14 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
               <motion.div initial={{ y: 0, rotate: 0 }} animate={{ y: [-4, 4, -4], rotate: [-3, 3, -3] }} transition={{ repeat: Infinity, duration: 1.2 }} className="text-6xl">
                 ✉️
               </motion.div>
-              <p className="mt-3 font-hand text-lg">正在投进邮筒…</p>
+              <p className="mt-3 font-hand text-lg">正在放进胶囊…</p>
               {kind === "photo" && <p className="mt-1 text-xs text-ink-3">小局在仔细看你的照片</p>}
             </motion.div>
           )}
         </AnimatePresence>
 
-        <h1 className="font-hand text-3xl">寄一封生活的信</h1>
+        <h1 className="font-hand text-3xl">放一颗胶囊</h1>
+        <p className="mt-1 text-sm text-ink-2">记下生活里的一个瞬间。放进去以后，小局会问你几个问题，帮你把那天的故事补完整。</p>
         <div className="mt-4 inline-flex rounded-full border border-line bg-card p-1">
           {TABS.map(({ k, label, icon: Icon }) => (
             <button key={k} onClick={() => setKind(k)} className={cn("flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm transition", kind === k ? "bg-stamp text-white" : "text-ink-2")}>
@@ -286,14 +290,14 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
           {kind === "voice" && <VoiceRecorder onAudio={setAudio} onTranscript={setText} />}
           <textarea
             className="input min-h-[140px] resize-y font-hand text-lg leading-8"
-            placeholder={kind === "photo" ? "想说点什么吗？（可选，不写小局也会问你）" : kind === "voice" ? "语音转写会出现在这里，也可以手动修改" : "今天发生了什么？开心的、难过的、平平无奇的，都可以。"}
+            placeholder={kind === "photo" ? "想说点什么吗？（可选，不写小局也会问你）" : kind === "voice" ? "语音转写会出现在这里，也可以手动修改" : "发生了什么？开心的、难过的、平平无奇的，都可以。"}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-ink-3">
-              什么时候
-              <input type="datetime-local" className="input mt-1" value={when} onChange={(e) => setWhen(e.target.value)} />
+              什么时候（只能选已经发生的时间）
+              <input type="datetime-local" className="input mt-1" max={maxWhen} value={when} onChange={(e) => setWhen(e.target.value > maxWhen ? maxWhen : e.target.value)} />
             </label>
             <label className="text-xs text-ink-3">
               在哪里（可选）
@@ -303,7 +307,7 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
           {error && <p className="text-sm text-stamp">{error}</p>}
           <div className="flex justify-end">
             <button className="btn btn-primary !px-6" disabled={!canSend || stage === "sending"} onClick={send}>
-              <Send size={16} /> 寄出
+              <Send size={16} /> 放进去
             </button>
           </div>
         </div>
@@ -482,10 +486,10 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
           )}
 
           <div className="flex flex-wrap gap-3">
-            <Link href={`/entry/${result.entry.id}`} className="btn btn-ghost">
-              查看这条记录
+            <Link href={`/capsules/${result.entry.id}`} className="btn btn-ghost">
+              查看这颗胶囊
             </Link>
-            <button onClick={() => window.location.assign("/record")} className="btn btn-primary">
+            <button onClick={() => window.location.assign("/capsules/new")} className="btn btn-primary">
               再寄一封
             </button>
           </div>

@@ -13,11 +13,11 @@ export default async function ManageMemoryPage() {
     <div className="space-y-6">
       <header>
         <Link href="/memory" className="inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
-          <ArrowLeft size={14} /> 返回记忆宫殿
+          <ArrowLeft size={14} /> 返回记忆
         </Link>
         <h1 className="mt-3 font-hand text-3xl">记忆管理</h1>
         <p className="mt-2 text-sm leading-6 text-ink-2">
-          你可以更正记忆，也可以撤回它。小局不再把撤回的记录作为有效长期记忆使用。原始日记、历史信件和撤回记录仍会保留。
+          你可以更正记忆，也可以撤回它。小局不再把撤回的记录作为有效长期记忆使用。原始胶囊、历史信件和撤回记录仍会保留。
         </p>
       </header>
 

@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { ToastProvider } from "@/components/Toast";
-import { PostmanPing } from "@/components/PostmanPing";
+import { CuratorPing } from "@/components/CuratorPing";
 import { db } from "@/lib/db";
-import { now, getOffset } from "@/lib/clock";
+import { now } from "@/lib/clock";
 
 export const metadata: Metadata = {
   title: "时光邮局 · 小局陪你记住生活",
-  description: "用照片、语音和日记记录生活，小局慢慢认识你，并在未来的某一天，以过去或未来的你的口吻给你写信。",
+  description: "把生活放进胶囊，给想念的人、未来的自己、平行时空的自己写信。邮局主理人小局会记住你的故事，时不时给你来信。",
 };
 
 export const viewport: Viewport = {
@@ -23,17 +23,13 @@ export const viewport: Viewport = {
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [t, offset, unread] = await Promise.all([
-    now(),
-    getOffset(),
-    db.letter.count({ where: { deliveredAt: { not: null }, readAt: null } }),
-  ]);
+  const [t, unread] = await Promise.all([now(), db.letter.count({ where: { deliveredAt: { not: null }, readAt: null } })]);
   return (
     <html lang="zh-CN">
       <body className="min-h-dvh">
         <ToastProvider>
-          <Nav unread={unread} today={t.toISOString()} offsetDays={Math.round(offset / 86_400_000)} />
-          <PostmanPing />
+          <Nav unread={unread} today={t.toISOString()} />
+          <CuratorPing />
           <main className="mx-auto w-full max-w-5xl px-4 pb-28 pt-4 md:pb-16 md:pt-6">{children}</main>
         </ToastProvider>
       </body>
