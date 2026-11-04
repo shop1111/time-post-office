@@ -92,7 +92,7 @@ export function LetterView({ l, cited, sentences }: { l: L; cited: Cited[]; sent
           </button>
           {voice.mode === "tts" && voice.tts && (
             <div className="flex w-full flex-col items-end gap-1 sm:w-96">
-              <AudioPlayer src={voice.tts.url} autoPlay onEnded={voice.stop} label="朗读" className="w-full" />
+              <AudioPlayer src={voice.tts.url} autoPlay onEnded={voice.stop} onError={voice.ttsFailed} label="朗读" className="w-full" />
               <ExecutionBadge info={voice.tts.execution} showDuration={false} />
             </div>
           )}

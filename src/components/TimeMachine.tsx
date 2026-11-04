@@ -38,9 +38,15 @@ export function TimeMachine({ today, offsetDays }: { today: string; offsetDays: 
   }, [router]);
 
   async function reset() {
-    await fetch("/api/postman", { method: "POST", body: JSON.stringify({ action: "reset" }) });
-    toast("已回到真实的今天", "🕰️");
-    router.refresh();
+    try {
+      const r = await fetch("/api/postman", { method: "POST", body: JSON.stringify({ action: "reset" }) });
+      if (!r.ok) throw new Error();
+      toast("已回到真实的今天", "🕰️");
+      router.refresh();
+    } catch {
+      // 失败时时钟还停在快进后的日子，如实说，按钮还在可以再点
+      toast("没能拨回今天，请稍后再试", "⚠️");
+    }
   }
 
   return (

@@ -87,6 +87,8 @@ npm run dev
 打开 http://localhost:3000 。
 
 > 开发模式（`npm run dev`）每个页面第一次打开要现场编译，会慢几秒。演示请用正式模式：`npm run build && npm start`，每页只要几十毫秒。
+>
+> 部署到海外或 UTC 服务器时请设置 `TZ=Asia/Shanghai`：「过去的你」的落款日按服务器时区划分。
 
 接入 DeepSeek：在 `.env` 中填 `CHAT_API_KEY`，重启即可。DeepSeek 当前的 `deepseek-flash` 支持图片理解（[官方能力表](https://api-docs.deepseek.com/quick_start/pricing/)），本项目仍按角色独立配置，看图请设置 `VISION_*`（见 `.env.example`）。
 

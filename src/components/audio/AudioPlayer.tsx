@@ -19,12 +19,15 @@ export function AudioPlayer({
   label,
   autoPlay = false,
   onEnded,
+  onError,
   className,
 }: {
   src: string;
   label?: string;
   autoPlay?: boolean;
   onEnded?: () => void;
+  /** 音频加载或解码失败：调用方可以换别的办法（比如改用浏览器朗读） */
+  onError?: () => void;
   className?: string;
 }) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -33,6 +36,20 @@ export function AudioPlayer({
   const [dur, setDur] = useState(NaN);
   const [failed, setFailed] = useState(false);
   const probing = useRef(false);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  const fail = () => {
+    setFailed(true);
+    onErrorRef.current?.();
+  };
+
+  // 卸载（停止朗读、离开页面）时主动停下，不依赖浏览器回收元素时才静音。
+  // 只暂停、不清 src：开发模式下 effect 会先清理再重跑，清掉 src 就放不出来了
+  useEffect(() => {
+    const a = audio.current;
+    return () => a?.pause();
+  }, []);
 
   // 服务端渲染的 <audio> 可能在 React 接管前就读完了元数据，那次 loadedmetadata 事件错过了，这里补一次
   useEffect(() => {
@@ -65,7 +82,7 @@ export function AudioPlayer({
 
   function toggle() {
     const a = audio.current!;
-    if (a.paused) a.play().catch(() => setFailed(true));
+    if (a.paused) a.play().catch(fail);
     else a.pause();
   }
 
@@ -92,7 +109,7 @@ export function AudioPlayer({
           setPlaying(false);
           onEnded?.();
         }}
-        onError={() => setFailed(true)}
+        onError={fail}
       />
       <button onClick={toggle} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stamp text-white" aria-label={playing ? "暂停" : "播放"}>
         {playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}

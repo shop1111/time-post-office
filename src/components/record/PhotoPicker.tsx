@@ -23,6 +23,7 @@ async function compress(file: File): Promise<File> {
   c.width = Math.round(bmp.width * scale);
   c.height = Math.round(bmp.height * scale);
   c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close(); // 解码后的整张大图很占内存，画完就释放
   const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/jpeg", 0.85));
   return new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" });
 }
@@ -60,7 +61,13 @@ export function PhotoPicker({ value, onChange }: { value: PhotoInfo | null; onCh
       <div className="card relative overflow-hidden p-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={value.preview} alt="预览" className="max-h-[360px] w-full rounded-lg object-cover" />
-        <button onClick={() => onChange(null)} className="absolute right-4 top-4 rounded-full bg-black/50 p-1.5 text-white" aria-label="移除照片">
+        <button
+          onClick={() => {
+            // 预览地址只在撰写页用：移除时释放；寄出后追问页还要用，所以不在卸载时释放
+            URL.revokeObjectURL(value.preview);
+            onChange(null);
+          }}
+          className="absolute right-4 top-4 rounded-full bg-black/50 p-1.5 text-white" aria-label="移除照片">
           <X size={16} />
         </button>
         <div className="flex flex-wrap gap-2 px-1 pt-2">

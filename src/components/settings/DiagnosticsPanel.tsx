@@ -93,11 +93,15 @@ export function DiagnosticsPanel({ initial }: { initial: DiagnosticsResponse }) 
 
   const chat = d.capabilities.find((c) => c.role === "chat");
   const total = d.summary.remote + d.summary.mock + d.summary.fallback;
+  // 填了配置不等于连得上：要有过一次真实调用成功，或者刚测通，才算「正常」
+  const chatVerified = d.recent.some((c) => c.role === "chat" && c.mode === "remote") || pings.chat?.tone === "ok";
   const overall = !chat?.configured
     ? { text: "演示模式（本地规则）", cls: "border-line bg-paper-2 text-ink-2" }
     : d.summary.fallback > 0
       ? { text: `最近有 ${d.summary.fallback} 次降级`, cls: "border-gold/40 bg-gold/10 text-gold" }
-      : { text: "真实模型 · 正常", cls: "border-post/40 bg-post-soft text-post" };
+      : chatVerified
+        ? { text: "真实模型 · 正常", cls: "border-post/40 bg-post-soft text-post" }
+        : { text: "已配置 · 还没验证，点「测一下」", cls: "border-line bg-paper-2 text-ink-2" };
 
   return (
     <section className="card p-5" aria-labelledby="diag-title">

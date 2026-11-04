@@ -21,6 +21,9 @@ export function useReadAloud(letterId: string, sentences: string[]) {
   const voice = useRef<SpeechSynthesisVoice | null>(null);
   const ctrl = useRef<AbortController | null>(null);
 
+  // 合成请求的清理和浏览器朗读能力无关：没有 speechSynthesis 的浏览器离开页面也要取消请求
+  useEffect(() => () => ctrl.current?.abort(), []);
+
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     setBrowserOk(true);
@@ -33,7 +36,6 @@ export function useReadAloud(letterId: string, sentences: string[]) {
     return () => {
       window.speechSynthesis.removeEventListener("voiceschanged", pick);
       window.speechSynthesis.cancel();
-      ctrl.current?.abort();
     };
   }, []);
 
@@ -114,5 +116,13 @@ export function useReadAloud(letterId: string, sentences: string[]) {
     }
   }, [letterId, tts, browserOk, speakInBrowser]);
 
-  return { mode, reading, tts, notice, start, stop };
+  /** 合成成功但音频放不出来（文件丢了、网络断了、解码失败）：丢掉这份结果，改用浏览器朗读 */
+  const ttsFailed = useCallback(() => {
+    setTts(null);
+    setNotice("朗读音频没加载出来，改用浏览器朗读");
+    if (browserOk) speakInBrowser();
+    else setMode("idle");
+  }, [browserOk, speakInBrowser]);
+
+  return { mode, reading, tts, notice, start, stop, ttsFailed };
 }

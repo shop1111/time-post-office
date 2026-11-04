@@ -28,34 +28,72 @@ export function VoiceRecorder({ onAudio, onTranscript }: { onAudio: (b: Blob | n
   const canvas = useRef<HTMLCanvasElement>(null);
   const stopFns = useRef<Array<() => void>>([]);
   const finalText = useRef("");
+  // 授权弹窗还没关时：挡住重复点击；期间离开页面，拿到的麦克风要马上关掉
+  const starting = useRef(false);
+  const alive = useRef(true);
+  const urlRef = useRef<string | null>(null);
 
   useEffect(() => {
+    alive.current = true;
     const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
     setSrOk(!!(w.SpeechRecognition || w.webkitSpeechRecognition));
-    return () => stopFns.current.forEach((f) => f());
+    return () => {
+      alive.current = false;
+      stopFns.current.forEach((f) => f());
+      stopFns.current = [];
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    };
   }, []);
 
   async function start() {
+    if (starting.current || rec) return;
+    starting.current = true;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      alert("没有拿到麦克风权限，可以直接打字哦");
+      starting.current = false;
+      if (alive.current) alert("没有拿到麦克风权限，可以直接打字哦");
       return;
     }
+    starting.current = false;
+    if (!alive.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    try {
+      record(stream);
+    } catch {
+      // 浏览器不支持录音格式等：释放麦克风，别让指示灯一直亮着
+      stopFns.current.forEach((f) => f());
+      stopFns.current = [];
+      stream.getTracks().forEach((t) => t.stop());
+      alert("这个浏览器没法录音，可以直接打字哦");
+    }
+  }
+
+  function record(stream: MediaStream) {
+    // 重录就是替换：音频换成新的，转写也从新的一段开始，不接在上一段后面
+    finalText.current = "";
     const chunks: Blob[] = [];
     const mr = new MediaRecorder(stream);
     mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     mr.onstop = () => {
       const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
-      onAudio(blob);
-      setAudioUrl(URL.createObjectURL(blob));
       stream.getTracks().forEach((t) => t.stop());
+      if (!alive.current) return;
+      onAudio(blob);
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = URL.createObjectURL(blob);
+      setAudioUrl(urlRef.current);
     };
+    // 先登记停止方法：后面任何一步出错，外层都能把已经开起来的东西关掉
+    stopFns.current = [() => mr.state !== "inactive" && mr.stop()];
     mr.start();
 
     // 波形
     const ctx = new AudioContext();
+    stopFns.current.push(() => void ctx.close().catch(() => {}));
     const src = ctx.createMediaStreamSource(stream);
     const an = ctx.createAnalyser();
     an.fftSize = 512;
@@ -110,13 +148,11 @@ export function VoiceRecorder({ onAudio, onTranscript }: { onAudio: (b: Blob | n
     }
 
     const timer = setInterval(() => setSecs((s) => s + 1), 1000);
-    stopFns.current = [
-      () => mr.state !== "inactive" && mr.stop(),
+    stopFns.current.push(
       () => cancelAnimationFrame(raf),
-      () => ctx.close(),
       () => sr?.stop(),
       () => clearInterval(timer),
-    ];
+    );
     setSecs(0);
     setRec(true);
   }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, Mic, PenLine, Send, X, Check, RotateCcw, AlertCircle } from "lucide-react";
+import { Camera, Mic, PenLine, Send, X, Check, RotateCcw, AlertCircle, Loader2 } from "lucide-react";
 import { PhotoPicker, type PhotoInfo } from "./PhotoPicker";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { RecallChips, type Recalled } from "./RecallChips";
@@ -42,6 +42,22 @@ const MAX_ROUNDS = 3;
 const BUSY_RETRIES = 5;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 按录音的真实格式起文件名：Safari 录出来的是 mp4，不能一律叫 .webm（服务端按扩展名保存和回放） */
+function audioFileName(type: string) {
+  const ext = type.includes("mp4") || type.includes("aac") ? "m4a" : type.includes("ogg") ? "ogg" : type.includes("wav") ? "wav" : type.includes("mpeg") || type.includes("mp3") ? "mp3" : "webm";
+  return `voice.${ext}`;
+}
+
+/** 读接口的错误说明；代理返回 HTML 之类的非 JSON 时用兜底文字 */
+async function errorText(r: Response, fallback: string) {
+  try {
+    const data = await r.json();
+    return typeof data?.error === "string" && data.error ? data.error : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 type RoundOutcome = { kind: "done" } | { kind: "limit" } | { kind: "aborted" } | { kind: "failed"; error: StreamError };
 
 const TABS: Array<{ k: Kind; label: string; icon: typeof Camera }> = [
@@ -69,6 +85,8 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
   const [final, setFinal] = useState(() => (resume?.messages.filter((m) => m.role === "assistant").length ?? 0) >= MAX_ROUNDS);
   const [reply, setReply] = useState("");
   const [forgotten, setForgotten] = useState<Set<string>>(new Set());
+  const [forgetting, setForgetting] = useState<Set<string>>(new Set());
+  const [forgetError, setForgetError] = useState("");
   const [error, setError] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const askCtrl = useRef<AbortController | null>(null);
@@ -79,14 +97,17 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
   const photoSrc = photo?.preview ?? photoUrl(resume?.entry.photoPath);
 
   const sendTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 离开页面后迟到的响应不能再改地址栏、再发追问
+  const alive = useRef(true);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
       clearTimeout(sendTimer.current);
       askCtrl.current?.abort();
-    },
-    [],
-  );
+    };
+  }, []);
 
   // 刷新后接上：放到下一拍再开始，开发模式下 effect 连跑两次也只会请求一次
   useEffect(() => {
@@ -113,13 +134,18 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
   const canSend = kind === "photo" ? !!photo : kind === "voice" ? !!audio || text.trim().length > 0 : text.trim().length > 0;
 
   async function send() {
+    const at = new Date(when);
+    if (!when || Number.isNaN(at.getTime())) {
+      setError("请先填好这一天的日期和时间");
+      return;
+    }
     setError("");
     setStage("sending");
     const fd = new FormData();
     fd.set("type", kind);
     fd.set("text", text);
     if (kind === "voice") fd.set("transcript", text);
-    fd.set("occurredAt", new Date(when).toISOString());
+    fd.set("occurredAt", at.toISOString());
     if (place) fd.set("place", place);
     if (photo) {
       fd.set("photo", photo.file);
@@ -127,20 +153,27 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
       if (photo.lat !== null) fd.set("lat", String(photo.lat));
       if (photo.lng !== null) fd.set("lng", String(photo.lng));
     }
-    if (audio) fd.set("audio", new File([audio], "voice.webm", { type: audio.type }));
-    const r = await fetch("/api/entries", { method: "POST", body: fd });
-    const data = await r.json();
-    if (!r.ok) {
-      setError(data.error ?? "寄送失败");
+    if (audio) fd.set("audio", new File([audio], audioFileName(audio.type), { type: audio.type }));
+    // 任何一步失败都回到撰写页，写好的内容都还在，可以直接再寄
+    let id: string;
+    try {
+      const r = await fetch("/api/entries", { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await errorText(r, "寄送失败，请稍后再试"));
+      const data = await r.json();
+      id = data.entry.id;
+    } catch (e) {
+      if (!alive.current) return;
+      setError(e instanceof Error && !(e instanceof TypeError) && !(e instanceof SyntaxError) ? e.message : "网络好像断了，信没寄出去，内容都还在，可以再试一次");
       setStage("compose");
       return;
     }
-    setEntryId(data.entry.id);
+    if (!alive.current) return;
+    setEntryId(id);
     // 记下这条记录，刷新页面也能接着追问或看到整理进度
-    window.history.replaceState(null, "", `/record?entry=${data.entry.id}`);
+    window.history.replaceState(null, "", `/record?entry=${id}`);
     sendTimer.current = setTimeout(() => {
       setStage("interview");
-      ask(data.entry.id);
+      ask(id);
     }, 900);
   }
 
@@ -186,6 +219,8 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
         if (e instanceof SSEHttpError) {
           if (e.code === "INTERVIEW_BUSY" && attempt < BUSY_RETRIES) {
             await sleep(1000);
+            // 等待期间离开了页面或点了「收进邮局」：不再发下一次
+            if (ctrl.signal.aborted) return { kind: "aborted" };
             continue;
           }
           if (e.code === "INTERVIEW_LIMIT_REACHED") return { kind: "limit" };
@@ -240,9 +275,25 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
     fin.start();
   }
 
+  /** 只有后端确认撤回成功才划掉；失败要说出来，不能让人以为已经忘掉了 */
   async function forget(id: string) {
-    await fetch(`/api/memories/${id}`, { method: "DELETE" });
-    setForgotten((s) => new Set(s).add(id));
+    if (forgetting.has(id)) return;
+    setForgetError("");
+    setForgetting((s) => new Set(s).add(id));
+    try {
+      const r = await fetch(`/api/memories/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(await errorText(r, "没能忘掉这条，请稍后再试"));
+      if (alive.current) setForgotten((s) => new Set(s).add(id));
+    } catch (e) {
+      if (alive.current) setForgetError(e instanceof Error && !(e instanceof TypeError) ? e.message : "网络好像断了，这条还没忘掉，请稍后再试");
+    } finally {
+      if (alive.current)
+        setForgetting((s) => {
+          const next = new Set(s);
+          next.delete(id);
+          return next;
+        });
+    }
   }
 
   function submitReply() {
@@ -463,8 +514,8 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                     </div>
                   </div>
                   {!forgotten.has(m.id) ? (
-                    <button onClick={() => forget(m.id)} className="text-ink-3 hover:text-stamp" aria-label="忘掉这条">
-                      <X size={16} />
+                    <button onClick={() => forget(m.id)} disabled={forgetting.has(m.id)} className="text-ink-3 hover:text-stamp disabled:opacity-50" aria-label="忘掉这条">
+                      {forgetting.has(m.id) ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
                     </button>
                   ) : (
                     <Check size={16} className="text-ink-3" />
@@ -472,6 +523,11 @@ export function RecordFlow({ initialType, today, resume }: { initialType: Kind; 
                 </li>
               ))}
             </ul>
+            {forgetError && (
+              <p className="mt-2 flex items-center gap-1 text-xs text-stamp" role="alert">
+                <AlertCircle size={13} /> {forgetError}
+              </p>
+            )}
           </div>
 
           {result.card && (
