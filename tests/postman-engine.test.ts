@@ -37,6 +37,30 @@ beforeEach(async () => {
 afterAll(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await f.fixture.cleanup(); });
 
 describe("postman actual decisions", () => {
+  it.each([
+    { label: "全部撤回", statuses: ["retracted", "retracted"], eligible: false },
+    { label: "尚无记忆", statuses: [], eligible: true },
+    { label: "部分撤回", statuses: ["active", "retracted"], eligible: true },
+  ])("满30天的照片$label时，快照与回顾候选eligible=$eligible", async ({ statuses, eligible }) => {
+    const at = new Date(NOW.getTime() - 30 * 86_400_000);
+    const entry = await db.entry.create({ data: {
+      type: "photo", title: "旅行照片", occurredAt: at,
+      memories: { create: statuses.map(status => ({ status, kind: "event", content: "旅行中的回忆", occurredAt: at })) },
+    } });
+    const snapshot = await buildSnapshot(NOW);
+    expect(snapshot.entries.some(e => e.id === entry.id)).toBe(eligible);
+    expect(realCollect(snapshot).some(c => c.key === `anniv:${entry.id}:30`)).toBe(eligible);
+  });
+  it("全部撤回的记录也不计入近期情绪和记录数里程碑", async () => {
+    await db.entry.createMany({ data: Array.from({ length: 9 }, () => ({ type: "text", occurredAt: NOW })) });
+    for (let i = 0; i < 2; i++) await db.entry.create({ data: {
+      type: "text", occurredAt: NOW, mood: -1,
+      memories: { create: [{ kind: "event", content: "已撤回的低落经历", occurredAt: NOW, status: "retracted" }] },
+    } });
+    const snapshot = await buildSnapshot(NOW);
+    expect(snapshot.entries).toHaveLength(9);
+    expect(realCollect(snapshot)).toEqual([]);
+  });
   it.each(["unchanged", "retracted", "corrected", "revision", "deleted"] as const)("核查期间未引用的上下文%s：核对全部记忆，冲突不占触发键", async (change) => {
     vi.stubEnv("CHAT_API_KEY", "test-only-placeholder"); vi.stubEnv("CHAT_MODEL", "test-model"); vi.stubEnv("CHAT_BASE_URL", "https://compatible.example/v1");
     const entry = await db.entry.create({ data: { type: "text", occurredAt: NOW } });

@@ -15,7 +15,11 @@ const MIN_GAP_HOURS = 20;
 const STAGES: PostmanStage[] = ["retrieve", "generate", "check", "deliver"];
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
   const [entries, memories] = await Promise.all([
-    db.entry.findMany({ select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
+    db.entry.findMany({
+      // 与月度回忆一致；空关系的 every 也为真，必须用 some 区分尚未抽取的记录。
+      where: { NOT: { AND: [{ memories: { some: {} } }, { memories: { every: { status: "retracted" } } }] } },
+      select: { id: true, occurredAt: true, mood: true, title: true, type: true },
+    }),
     db.memory.findMany({ where: ACTIVE_MEMORY, include: { entities: { include: { entity: true } } } }),
   ]);
   const existing = new Set(entries.filter((entry) => entry.occurredAt <= now).map((entry) => entry.id));
