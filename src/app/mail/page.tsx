@@ -15,8 +15,8 @@ const TABS = [
   { k: "people", label: "收件人" },
 ] as const;
 
-export default async function Mail({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const { tab: raw } = await searchParams;
+export default async function Mail({ searchParams }: { searchParams: Promise<{ tab?: string; category?: string }> }) {
+  const { tab: raw, category } = await searchParams;
   const tab = TABS.some((t) => t.k === raw) ? raw! : "inbox";
   const t = await now();
   await ensureSystemCorrespondents();
@@ -25,7 +25,15 @@ export default async function Mail({ searchParams }: { searchParams: Promise<{ t
     db.letter.findMany({ where: { sender: "user" }, orderBy: { writtenAt: "desc" }, include: { correspondent: true } }),
     db.correspondent.findMany({ orderBy: { createdAt: "asc" }, include: { _count: { select: { letters: true } } } }),
   ]);
-  const unread = inbox.filter((l) => !l.readAt).length;
+  const unread = inbox.filter((l) => !l.readAt);
+  const read = inbox.filter((l) => l.readAt);
+  // 收件箱按状态分：未拆 / 已拆（在路上的信在「寄出的信」里看）
+  const categories = {
+    unread: { label: "未拆", letters: unread, empty: "没有待拆的来信。" },
+    read: { label: "已拆", letters: read, empty: "还没有拆过的信。" },
+  };
+  const activeCategory = category === "unread" || category === "read" ? category : unread.length > 0 ? "unread" : "read";
+  const { letters: shown, empty } = categories[activeCategory];
 
   return (
     <div className="space-y-6">
@@ -45,17 +53,39 @@ export default async function Mail({ searchParams }: { searchParams: Promise<{ t
         {TABS.map((x) => (
           <Link key={x.k} href={`/mail?tab=${x.k}`} className={cn("rounded-full px-4 py-1.5 text-sm transition", tab === x.k ? "bg-stamp text-white" : "text-ink-2")}>
             {x.label}
-            {x.k === "inbox" && unread > 0 && <span className="ml-1 opacity-80">{unread}</span>}
+            {x.k === "inbox" && unread.length > 0 && <span className="ml-1 opacity-80">{unread.length}</span>}
           </Link>
         ))}
       </nav>
 
       {tab === "inbox" && (
-        <section className="grid gap-3 sm:grid-cols-2">
-          {inbox.map((l, i) => (
-            <Envelope key={l.id} l={toEnvelope(l)} index={i} />
-          ))}
-          {inbox.length === 0 && <p className="text-sm text-ink-3">还没有来信。放几颗胶囊、写几封信，小局和收件人们会给你回信的。</p>}
+        <section className="space-y-4" aria-label="来信分类">
+          {inbox.length > 0 && (
+            <nav className="flex flex-wrap gap-2" aria-label="按状态查看来信">
+              {Object.entries(categories).map(([id, { label, letters }]) => (
+                <Link
+                  key={id}
+                  href={`/mail?tab=inbox&category=${id}`}
+                  scroll={false}
+                  aria-current={id === activeCategory ? "page" : undefined}
+                  className={cn("chip !px-3 !py-2 transition-colors hover:!border-stamp", id === activeCategory && "!border-stamp !bg-stamp !text-white")}
+                >
+                  {label} <span className="tabular-nums opacity-75">{letters.length}</span>
+                </Link>
+              ))}
+            </nav>
+          )}
+          {inbox.length === 0 ? (
+            <p className="text-sm text-ink-3">还没有来信。放几颗胶囊、写几封信，小局和收件人们会给你回信的。</p>
+          ) : shown.length === 0 ? (
+            <p className="card p-4 text-sm text-ink-3">{empty}</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {shown.map((l, i) => (
+                <Envelope key={l.id} l={toEnvelope(l)} index={i} />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
