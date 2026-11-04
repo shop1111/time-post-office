@@ -40,7 +40,7 @@ const TRIGGER_LABEL: Record<string, string> = {
   milestone: "里程碑",
   capsule: "时间胶囊",
   welcome: "初次见面",
-  manual: "邮差手写",
+  manual: "小局手写",
 };
 
 export function LetterView({ l, cited }: { l: L; cited: Cited[] }) {
@@ -62,7 +62,7 @@ export function LetterView({ l, cited }: { l: L; cited: Cited[] }) {
     await fetch(`/api/letters/${l.id}`, { method: "POST", body: JSON.stringify({ action: "reply", reply }) });
     setBusy(false);
     setSent(reply);
-    toast("回信已寄出，邮差会把它也好好收起来", "✉️");
+    toast("回信已寄出，小局会把它也好好收起来", "✉️");
     router.refresh();
   }
 
@@ -173,7 +173,7 @@ export function LetterView({ l, cited }: { l: L; cited: Cited[] }) {
           ) : (
             <>
               <div className="flex items-center gap-2 text-sm text-ink-2">
-                <Reply size={14} /> 给{l.sender === "past_self" ? "过去的自己" : l.sender === "future_self" ? "未来的自己" : "邮差"}回一封信
+                <Reply size={14} /> 给{l.sender === "past_self" ? "过去的自己" : l.sender === "future_self" ? "未来的自己" : "小局"}回一封信
               </div>
               <textarea className="input mt-3 min-h-[110px] font-hand text-lg" placeholder="回信也会成为你的一段记录" value={reply} onChange={(e) => setReply(e.target.value)} />
               <div className="mt-3 flex justify-end">

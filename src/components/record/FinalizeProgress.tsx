@@ -20,7 +20,7 @@ export const STAGE_INFO: Array<{ key: FinalizeStage; label: string; hint: string
 
 const HEAD: Record<FinalizePhase, string> = {
   idle: "准备收进邮局…",
-  running: "邮差正在整理这一天…",
+  running: "小局正在整理这一天…",
   completed: "整理好了",
   partial: "记忆已经存好，有一步没完成",
   failed: "整理到一半出了问题",

@@ -39,7 +39,7 @@ export function TimeMachine({ today, offsetDays }: { today: string; offsetDays: 
       const r = await fetch("/api/postman", { method: "POST", body: JSON.stringify({ action: "forward", days }) }).then((r) => r.json());
       const n = r.generated.length + r.delivered.length;
       setLog(r.candidates);
-      toast(n ? `时光流过 ${days} 天，邮差送来了 ${n} 封信` : `时光流过 ${days} 天，暂时没有新的信`, n ? "📮" : "⏳");
+      toast(n ? `时光流过 ${days} 天，小局送来了 ${n} 封信` : `时光流过 ${days} 天，暂时没有新的信`, n ? "📮" : "⏳");
       router.refresh();
     } finally {
       setBusy(null);
