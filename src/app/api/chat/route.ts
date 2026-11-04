@@ -1,4 +1,5 @@
-import { db } from "@/lib/db";
+import { withUser } from "@/lib/auth";
+import { currentUserId, db } from "@/lib/db";
 import { chatStream, ChatStreamError, type ChatMessage as ModelMessage } from "@/lib/ai/provider";
 import { chatSystem } from "@/lib/ai/prompts";
 import { mockChat } from "@/lib/ai/mock";
@@ -21,30 +22,32 @@ const CONTEXT_MESSAGES = 20;
 /** 页面上显示的历史条数 */
 const HISTORY_LIMIT = 60;
 
-/** 单机进程内只允许一轮在跑；globalThis 保证开发热更新也共用 */
-const lock = globalThis as unknown as { freeChatBusy?: boolean };
+/** 单机进程内每个用户只允许一轮在跑；globalThis 保证开发热更新也共用 */
+const state = globalThis as unknown as { freeChatBusy?: Set<string> };
+const busy: Set<string> = (state.freeChatBusy ??= new Set());
 
-export async function GET() {
+async function handleGET() {
   const rows = await db.chatMessage.findMany({ orderBy: { createdAt: "desc" }, take: HISTORY_LIMIT, select: { id: true, role: true, content: true, createdAt: true } });
   return Response.json({ messages: rows.reverse() });
 }
 
 /** 清空聊天记录（不影响胶囊和记忆） */
-export async function DELETE() {
-  if (lock.freeChatBusy) return fail(409, "CHAT_BUSY", "小局还在说话，等它说完再清空", true);
+async function handleDELETE() {
+  if (busy.has(currentUserId())) return fail(409, "CHAT_BUSY", "小局还在说话，等它说完再清空", true);
   await db.chatMessage.deleteMany({});
   return Response.json({ ok: true });
 }
 
-export async function POST(req: Request) {
-  if (!rateLimit(`chat:${clientKey(req)}`, 8, 6) || !rateLimit("chat:*", 40, 30)) return fail(429, "RATE_LIMITED", "说得有点快啦，歇一会儿再继续", true);
+async function handlePOST(req: Request) {
+  if (!rateLimit(`chat:${currentUserId()}`, 8, 6) || !rateLimit(`chat-ip:${clientKey(req)}`, 24, 18) || !rateLimit("chat:*", 120, 90)) return fail(429, "RATE_LIMITED", "说得有点快啦，歇一会儿再继续", true);
   const body = await req.json().catch(() => null) as { message?: unknown } | null;
   if (typeof body?.message !== "string" || !body.message.trim()) return fail(400, "INVALID_MESSAGE", "说点什么吧");
   const message = body.message.trim();
   if (Array.from(message).length > MAX_MESSAGE_CHARS) return fail(400, "MESSAGE_TOO_LONG", `一次说得太多啦，分几次讲吧（最多 ${MAX_MESSAGE_CHARS} 字）`);
-  if (lock.freeChatBusy) return fail(409, "CHAT_BUSY", "小局还在回上一句，稍等一下", true);
-  lock.freeChatBusy = true;
-  const release = () => { lock.freeChatBusy = false; };
+  const userId = currentUserId();
+  if (busy.has(userId)) return fail(409, "CHAT_BUSY", "小局还在回上一句，稍等一下", true);
+  busy.add(userId);
+  const release = () => { busy.delete(userId); };
   let streaming = false;
   try {
     const verdict = classifyInput(message);
@@ -126,3 +129,7 @@ export async function POST(req: Request) {
     return fail(500, "CHAT_FAILED", "小局暂时没回上话，稍后再试", true);
   } finally { if (!streaming) release(); }
 }
+
+export const GET = withUser(handleGET);
+export const DELETE = withUser(handleDELETE);
+export const POST = withUser(handlePOST);

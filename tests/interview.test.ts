@@ -8,7 +8,9 @@ const f = vi.hoisted(() => ({ entry: vi.fn(), create: vi.fn(), stream: vi.fn(), 
 vi.mock("@/lib/db", () => ({ db: {
   entry: { findUnique: f.entry }, entity: { findMany: async () => [{ name: "阿青", type: "person" }] },
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ entryMessage: { create: f.create } }),
-} }));
+}, currentUserId: () => "test-user" }));
+// 路由的登录校验由 withUser 负责；这里直接测业务逻辑
+vi.mock("@/lib/auth", () => ({ withUser: <T>(handler: T) => handler }));
 vi.mock("@/lib/ai/provider", async (original) => ({ ...await original<object>(), chatStream: f.stream }));
 vi.mock("@/lib/memory/retrieve", async (original) => ({ ...await original<object>(), retrieve: f.retrieve }));
 vi.mock("@/lib/memory/profile", () => ({ getProfile: async () => ({ summary: "" }) }));

@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
 import { Camera, Mic, PenLine, ArrowRight, Package, Mail, MessageCircle } from "lucide-react";
@@ -25,7 +26,7 @@ function greeting(h: number) {
   return "晚上好";
 }
 
-export default async function Home() {
+async function Home() {
   const t = await now();
   const [profile, capsuleCount, letterCount, memoryCount, unreadCount, letters, cards, all] = await Promise.all([
     getProfile(),
@@ -192,3 +193,5 @@ function SectionTitle({ title, sub, href, more }: { title: string; sub?: string;
     </div>
   );
 }
+
+export default userPage(Home);

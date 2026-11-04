@@ -1,20 +1,24 @@
 import { mkdir, writeFile, readFile } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { currentUserId } from "./db";
+import { userUploadDir } from "./tenancy";
 
-export const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
+/** 每个用户的上传文件放在自己的目录里（data/users/<userId>/uploads） */
+const uploadDir = () => userUploadDir(currentUserId());
 
 export async function saveUpload(file: File, prefix: string): Promise<string> {
-  await mkdir(UPLOAD_DIR, { recursive: true });
+  const dir = uploadDir();
+  await mkdir(dir, { recursive: true });
   const ext = (file.name.match(/\.[a-z0-9]+$/i)?.[0] ?? guessExt(file.type)).toLowerCase();
   const name = `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}${ext}`;
-  await writeFile(path.join(UPLOAD_DIR, name), Buffer.from(await file.arrayBuffer()));
+  await writeFile(path.join(dir, name), Buffer.from(await file.arrayBuffer()));
   return name;
 }
 
 export async function readUpload(name: string) {
   const safe = path.basename(name);
-  return readFile(path.join(UPLOAD_DIR, safe));
+  return readFile(path.join(uploadDir(), safe));
 }
 
 export function mimeOf(name: string) {

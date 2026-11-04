@@ -1,4 +1,5 @@
-import { db } from "@/lib/db";
+import { withUser } from "@/lib/auth";
+import { currentUserId, db } from "@/lib/db";
 import { chatStream, ChatStreamError, type ChatMessage } from "@/lib/ai/provider";
 import { interviewSystem } from "@/lib/ai/prompts";
 import { mockInterview } from "@/lib/ai/mock";
@@ -18,10 +19,10 @@ import type { ApiError, EntityType, ExecutionInfo, InterviewDoneEvent, Interview
 export const runtime = "nodejs";
 const fail = (status: number, code: string, error: string, retryable = false) => Response.json({ error, code, retryable } satisfies ApiError, { status });
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   // 限流：单个来源每分钟 6 次（可突发 8 次），全局每分钟 30 次
-  if (!rateLimit(`interview:${clientKey(req)}`, 8, 6) || !rateLimit("interview:*", 40, 30)) return fail(429, "RATE_LIMITED", "说得有点快啦，歇一会儿再继续", true);
+  if (!rateLimit(`interview:${currentUserId()}`, 8, 6) || !rateLimit(`interview-ip:${clientKey(req)}`, 24, 18) || !rateLimit("interview:*", 120, 90)) return fail(429, "RATE_LIMITED", "说得有点快啦，歇一会儿再继续", true);
   const release = tryStartInterview(id);
   if (!release) return fail(409, "INTERVIEW_BUSY", "这一轮追问还在进行，请稍后再试", true);
   let streaming = false;
@@ -142,3 +143,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return fail(500, "INTERVIEW_FAILED", "追问暂时失败，请稍后重试", true);
   } finally { if (!streaming) release(); }
 }
+
+export const POST = withUser(handlePOST);

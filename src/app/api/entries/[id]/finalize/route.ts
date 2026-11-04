@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/auth";
 import { getFinalizeStatus, JobRequestError, startFinalize, subscribeFinalize } from "@/lib/jobs";
 import { sseResponse } from "@/lib/server-sse";
 import type { ApiError } from "@/lib/types";
@@ -11,7 +12,7 @@ const failure = (error: unknown) => {
   } satisfies ApiError, { status: known ? error.status : 500 });
 };
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     // 任务不持有 req.signal，客户端断连只退订 SSE，后台照常完成。
@@ -25,7 +26,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (error) { return failure(error); }
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try { return Response.json(await getFinalizeStatus((await params).id)); }
   catch (error) { return failure(error); }
 }
+
+export const POST = withUser(handlePOST);
+export const GET = withUser(handleGET);

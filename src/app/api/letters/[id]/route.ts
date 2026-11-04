@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { now } from "@/lib/clock";
@@ -7,7 +8,7 @@ import { LetterError, sendLetter } from "@/lib/letters";
 export const runtime = "nodejs";
 
 /** 标记已读 / 回信。回信就是写给原寄信人的一封新信 */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { action, reply } = (await req.json()) as { action: "read" | "reply"; reply?: string };
   if (action === "read") {
@@ -26,3 +27,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     throw e;
   }
 }
+
+export const POST = withUser(handlePOST);

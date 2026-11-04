@@ -1,10 +1,11 @@
+import { withUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { correctMemory, retractMemory } from "@/lib/memory/manage";
 import { memoryErrorResponse } from "@/lib/memory/errors";
 
 export const runtime = "nodejs";
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const result = await correctMemory(id, await req.json());
@@ -14,7 +15,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await req.text();
@@ -24,3 +25,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return memoryErrorResponse(error);
   }
 }
+
+export const PATCH = withUser(handlePATCH);
+export const DELETE = withUser(handleDELETE);

@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { INSTANT_REPLIES_KEY } from "@/lib/correspondents";
@@ -5,7 +6,7 @@ import { INSTANT_REPLIES_KEY } from "@/lib/correspondents";
 export const runtime = "nodejs";
 
 /** 演示工具：回信立即送达 */
-export async function PATCH(req: Request) {
+async function handlePATCH(req: Request) {
   const { instantReplies } = (await req.json().catch(() => ({}))) as { instantReplies?: boolean };
   if (typeof instantReplies !== "boolean") return NextResponse.json({ error: "参数不对" }, { status: 400 });
   const value = instantReplies ? "1" : "0";
@@ -16,3 +17,5 @@ export async function PATCH(req: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withUser(handlePATCH);

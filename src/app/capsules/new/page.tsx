@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { RecordFlow, type ResumeState } from "@/components/record/RecordFlow";
 import { db } from "@/lib/db";
@@ -5,7 +6,7 @@ import { now } from "@/lib/clock";
 import { getFinalizeStatus, JobRequestError } from "@/lib/jobs";
 import { interviewState } from "@/lib/curator/planner";
 
-export default async function RecordPage({ searchParams }: { searchParams: Promise<{ type?: string; entry?: string; direct?: string }> }) {
+async function RecordPage({ searchParams }: { searchParams: Promise<{ type?: string; entry?: string; direct?: string }> }) {
   const { type, entry, direct } = await searchParams;
   const t = await now();
   const initial = type === "photo" || type === "voice" ? type : "text";
@@ -42,3 +43,5 @@ async function loadResume(id: string, direct: boolean): Promise<ResumeState | nu
     job,
   };
 }
+
+export default userPage(RecordPage);

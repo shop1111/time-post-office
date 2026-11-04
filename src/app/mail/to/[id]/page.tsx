@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Lock, PenLine } from "lucide-react";
@@ -6,7 +7,7 @@ import { cn, fmtCN } from "@/lib/utils";
 import { CORRESPONDENT_KIND_LABEL, type CorrespondentKind } from "@/lib/types";
 
 /** 和某位收件人的往来信件 */
-export default async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
+async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const c = await db.correspondent.findUnique({ where: { id }, include: { letters: { orderBy: { writtenAt: "asc" } } } });
   if (!c) notFound();
@@ -54,3 +55,5 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
     </div>
   );
 }
+
+export default userPage(ThreadPage);

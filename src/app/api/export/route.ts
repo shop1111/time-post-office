@@ -1,9 +1,10 @@
+import { withUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 /** 数据完全属于用户：一键导出全部胶囊、记忆、收件人与信件 */
-export async function GET() {
+async function handleGET() {
   const [profile, entries, memories, entities, correspondents, letters, cards] = await Promise.all([
     db.profile.findMany(),
     db.entry.findMany({ include: { messages: true } }),
@@ -18,3 +19,5 @@ export async function GET() {
     headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename="time-post-office-export.json"` },
   });
 }
+
+export const GET = withUser(handleGET);

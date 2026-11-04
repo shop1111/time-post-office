@@ -7,6 +7,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// 多用户部署：同一份 schema 对应三类 SQLite 文件（见 src/lib/tenancy.ts）
+//   data/auth.db               账号与登录会话（只用 User / Session）
+//   data/users/<userId>/app.db 每个用户独立的一份业务数据（不用 User / Session）
+//   data/template.db           新用户注册时复制的空模板
+// 改动 schema 后运行 `npm run db:push`，会把所有库同步到最新结构。
+
+/// 账号（只存在于 auth.db）
+model User {
+  id           String    @id @default(cuid())
+  /// 小写存储，登录时不区分大小写
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
+/// 登录会话（只存在于 auth.db）。id 是会话令牌的 SHA-256，令牌本身只在 Cookie 里
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 /// 一条原始生活记录：照片 / 语音 / 日记
 model Entry {
   id            String         @id @default(cuid())

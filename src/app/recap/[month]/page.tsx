@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { RecapView } from "@/components/recap/RecapView";
@@ -9,7 +10,7 @@ function shift(month: string, d: number) {
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default async function RecapPage({ params }: { params: Promise<{ month: string }> }) {
+async function RecapPage({ params }: { params: Promise<{ month: string }> }) {
   const { month } = await params;
   const recap = await getCachedRecap(month);
   const [y, m] = month.split("-").map(Number);
@@ -35,3 +36,5 @@ export default async function RecapPage({ params }: { params: Promise<{ month: s
     </div>
   );
 }
+
+export default userPage(RecapPage);

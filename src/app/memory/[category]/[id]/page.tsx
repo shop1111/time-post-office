@@ -1,3 +1,4 @@
+import { userPage } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BookOpen, CalendarDays, ChevronRight, Flower2, Heart, MoreHorizontal } from "lucide-react";
@@ -7,7 +8,7 @@ import { categoryItems, findCategory, mapDate } from "@/lib/memory/map";
 
 import { photoUrl } from "@/lib/utils";
 
-export default async function MemoryDetailPage({ params }: { params: Promise<{ category: string; id: string }> }) {
+async function MemoryDetailPage({ params }: { params: Promise<{ category: string; id: string }> }) {
   const { category: categoryId, id } = await params;
   const category = findCategory(categoryId);
   if (!category) notFound();
@@ -68,3 +69,5 @@ export default async function MemoryDetailPage({ params }: { params: Promise<{ c
   </article>;
 }
 
+
+export default userPage(MemoryDetailPage);
