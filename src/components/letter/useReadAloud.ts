@@ -42,6 +42,11 @@ export function useReadAloud(letterId: string, sentences: string[]) {
     synth.cancel();
     setMode("browser");
     const todo = sentences.map((text, i) => ({ text: text.trim(), i })).filter((s) => s.text);
+    // 没有可读的句子：不进入朗读状态，否则按钮会一直停在「停止朗读」
+    if (!todo.length) {
+      setMode("idle");
+      return;
+    }
     todo.forEach(({ text, i }, n) => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "zh-CN";

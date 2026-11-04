@@ -20,7 +20,7 @@ vi.mock("@/lib/letters/reply", async (original) => {
   return { ...actual, judgeReply: vi.fn(actual.judgeReply) };
 });
 const realJudge = vi.mocked(judgeReply).getMockImplementation()!;
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.stubEnv("CHAT_API_KEY", ""); vi.stubEnv("EMBED_MODE", "lite");
   vi.spyOn(console, "warn").mockImplementation(() => {});

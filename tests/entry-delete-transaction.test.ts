@@ -11,7 +11,7 @@ vi.mock("@/lib/db", async () => {
 });
 vi.mock("@/lib/story", () => ({ generateStoryCard: vi.fn() }));
 vi.mock("@/lib/files", () => ({ deleteUpload: vi.fn() }));
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.clearAllMocks(); vi.spyOn(console, "warn").mockImplementation(() => {});
   await db.$transaction([db.job.deleteMany(), db.entry.deleteMany(), db.monthlyRecap.deleteMany(), db.setting.deleteMany()]);

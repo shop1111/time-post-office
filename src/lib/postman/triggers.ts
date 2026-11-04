@@ -117,7 +117,8 @@ export function lowMoodTriggers(s: Snapshot): LetterCandidate[] {
 export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
   const out: LetterCandidate[] = [];
   const n = s.entries.filter((e) => e.occurredAt <= s.now).length;
-  for (const target of [10, 30, 100, 365]) {
+  // 只取已达到的最大里程碑：不会先寄「30 段」再补一封过时的「10 段」，去重仍由引擎负责。
+  for (const target of [365, 100, 30, 10]) {
     const key = `count:${target}`;
     if (n >= target) {
       const best = [...s.memories].sort((a, b) => b.importance - a.importance).slice(0, 3);
@@ -132,6 +133,7 @@ export function milestoneTriggers(s: Snapshot): LetterCandidate[] {
         query: best.map((m) => m.content).join(" "),
         entities: [],
       });
+      break;
     }
   }
   for (const p of s.entityFreq.filter((e) => e.type === "person" && e.count >= 4)) {

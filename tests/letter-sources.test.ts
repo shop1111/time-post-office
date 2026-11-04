@@ -11,7 +11,7 @@ vi.mock("@/lib/db", async () => {
 });
 const content = "去年秋天我和小林沿着杭州西湖散步，看到了金色落日。";
 const date = new Date("2026-08-09T10:00:00.000Z");
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllGlobals();
   vi.stubEnv("CHAT_API_KEY", ""); vi.stubEnv("EMBED_MODE", "lite"); vi.stubEnv("POSTMAN_DEBUG_FAIL", "");

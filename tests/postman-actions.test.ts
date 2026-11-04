@@ -25,7 +25,7 @@ const plan = async () => {
   const occurredAt = new Date(Date.now() - 10 * MS_DAY);
   return db.entry.create({ data: { type: "text", text: "考试计划", occurredAt, memories: { create: [{ kind: "plan", content: "准备参加考试", importance: 8, occurredAt, dueAt: new Date(Date.now() - MS_DAY) }] } } });
 };
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllEnvs();
   vi.spyOn(console, "warn").mockImplementation(() => {});

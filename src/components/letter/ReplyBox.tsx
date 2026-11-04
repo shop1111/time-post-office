@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { STAGE_INFO } from "@/components/record/FinalizeProgress";
 import { useFinalize } from "@/components/record/useFinalize";
 import { cn } from "@/lib/utils";
+import { SENDER_LABEL, type Sender } from "@/lib/types";
 
 interface ReplyResponse {
   replyEntryId: string;
@@ -51,7 +52,7 @@ export function ReplyBox({ letterId, sender, triggerType, initialReply }: { lett
     }
   }
 
-  const to = sender === "past_self" ? "过去的自己" : sender === "future_self" ? "未来的自己" : "邮差";
+  const to = SENDER_LABEL[sender as Sender] ?? "邮差";
 
   if (!sent) {
     return (

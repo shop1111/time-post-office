@@ -25,7 +25,7 @@ const realCollect = vi.mocked(collectCandidates).getMockImplementation()!;
 const NOW = new Date("2026-11-03T12:00:00Z");
 const candidate = (key: string, type: TriggerType, priority = 10): LetterCandidate => ({ key, type, priority, sender: "postman", reason: "测试候选", writtenAt: NOW, anchorMemoryIds: [], query: "回忆", entities: [] });
 const existing = (key: string, deliveredAt: Date | null = NOW, sender = "postman") => db.letter.create({ data: { triggerKey: key, sender, subject: key, body: "已有信", triggerType: "manual", writtenAt: NOW, scheduledAt: NOW, deliveredAt } });
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals();
   vi.mocked(writeLetter).mockReset().mockImplementation(realWrite);

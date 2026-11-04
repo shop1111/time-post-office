@@ -24,9 +24,9 @@ describe("邮差触发器", () => {
     });
     expect(lowMoodTriggers(s)[0].anchorMemoryIds).toEqual(["bright"]);
   });
-  it("输出所有已达到的记录里程碑，由引擎统一去重，不因10条挡住30条", () => {
+  it("只输出已达到的最大记录里程碑，不因10条挡住30条，也不在30条之后补寄10条", () => {
     const entries = Array.from({ length: 35 }, (_, i) => ({ id: String(i), occurredAt: ago(1), mood: 0, title: "", type: "text" }));
-    expect(milestoneTriggers(snap({ entries })).map((c) => c.key)).toEqual(["count:10", "count:30"]);
+    expect(milestoneTriggers(snap({ entries })).map((c) => c.key)).toEqual(["count:30"]);
   });
   it("旅行照片满 90 天 → 过去的你候选，去重由引擎负责", () => {
     const s = snap({

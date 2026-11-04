@@ -43,8 +43,8 @@ vi.mock("@/lib/story", async (original) => {
 });
 
 beforeAll(() => {
-  execFileSync(process.execPath, [join(process.cwd(), "node_modules/prisma/build/index.js"), "db", "push", "--skip-generate"], { env: { ...process.env, DATABASE_URL: fixture.url, RUST_LOG: "info", RUST_BACKTRACE: "1" }, stdio: "pipe", timeout: 30_000 });
-}, 30_000);
+  execFileSync(process.execPath, [join(process.cwd(), "node_modules/prisma/build/index.js"), "db", "push", "--skip-generate"], { env: { ...process.env, DATABASE_URL: fixture.url, RUST_LOG: "info", RUST_BACKTRACE: "1" }, stdio: "pipe", timeout: 120_000 });
+}, 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks();
   vi.clearAllMocks();

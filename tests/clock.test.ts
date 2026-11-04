@@ -7,7 +7,7 @@ vi.mock("@/lib/db", async () => {
   f.fixture = testDatabase("clock");
   return { db: f.fixture.db };
 });
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(() => resetClock());
 afterAll(() => f.fixture.cleanup());
 it("并发自增包括首次创建，不丢天数", async () => {

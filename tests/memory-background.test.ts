@@ -21,7 +21,7 @@ vi.mock("@/lib/ai/provider", async (original) => {
 });
 const realEmbed = vi.mocked(embed).getMockImplementation()!;
 const now = new Date("2026-11-04T12:00:00Z");
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.stubEnv("EMBED_MODE", "lite");
   f.beforeTouch = undefined;

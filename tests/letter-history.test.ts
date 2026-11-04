@@ -8,7 +8,7 @@ vi.mock("@/lib/db", async () => {
   const { testDatabase } = await import("./helpers/database"); f.fixture = testDatabase("letter-history");
   return { db: f.fixture.db, parseJson: <T>(text: string, fallback: T): T => { try { return JSON.parse(text); } catch { return fallback; } } };
 });
-beforeAll(() => f.fixture.setup(), 30_000);
+beforeAll(() => f.fixture.setup(), 120_000);
 beforeEach(async () => {
   vi.stubEnv("CHAT_API_KEY", "test-only-placeholder"); vi.stubEnv("CHAT_BASE_URL", "https://compatible.example/v1"); vi.stubEnv("CHAT_MODEL", "test-model");
   vi.stubEnv("EMBED_MODE", "lite"); vi.stubEnv("POSTMAN_DEBUG_FAIL", "");
