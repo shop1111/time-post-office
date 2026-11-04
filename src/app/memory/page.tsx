@@ -1,3 +1,4 @@
+import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
@@ -36,7 +37,10 @@ export default async function MemoryPage() {
             <RefreshProfile stale={profile.isStale} />
           </div>
           {profile.isStale && <span className="chip mt-3 !bg-gold/20">画像待更新</span>}
-          <p className="mt-3 text-[15px] leading-7">{profile.isStale ? "请根据当前有效记忆更新画像，旧结论已暂停使用。" : profile.summary || "还在慢慢认识你。"}</p>
+          <div className="mt-3 flex items-center gap-3">
+            <p className="min-w-0 flex-1 text-[15px] leading-7">{profile.isStale ? "请根据当前有效记忆更新画像，旧结论已暂停使用。" : profile.summary || "还在慢慢认识你。"}</p>
+            <XiaojuImage scene="memory" className="h-20 w-16 sm:h-24 sm:w-24" />
+          </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {profile.traitsList.map((t) => (
               <span key={t} className="chip !bg-stamp-soft !text-stamp">

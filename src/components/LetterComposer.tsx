@@ -1,5 +1,6 @@
 "use client";
 
+import { XiaojuImage } from "@/components/XiaojuImage";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -102,6 +103,12 @@ export function LetterComposer({ today, recipients, initialTo }: { today: string
         <div className={cn("card overflow-hidden transition", sent && "opacity-30")}>
           <div className="airmail h-1.5" />
           <div className="p-5">
+            {target.kind === "curator" && (
+              <div className="mb-4 flex items-center gap-3 rounded-xl border border-line bg-paper px-3 pt-2">
+                <XiaojuImage scene="compose" className="h-16 w-16" />
+                <p className="font-hand text-lg text-ink-2">写给小局</p>
+              </div>
+            )}
             <input
               className="w-full bg-transparent font-hand text-xl outline-none placeholder:text-ink-3"
               placeholder={future ? "信的标题，例如：给一年后的自己" : `信的标题，例如：写给${who}`}

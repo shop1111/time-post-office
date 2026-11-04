@@ -1,3 +1,4 @@
+import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin, Mic, Camera, PenLine } from "lucide-react";
@@ -64,7 +65,10 @@ export default async function CapsulePage({ params }: { params: Promise<{ id: st
 
       {entry.messages.length > 0 && (
         <section className="card p-5">
-          <h2 className="font-hand text-lg">和小局的对话</h2>
+          <h2 className="flex items-center gap-2 font-hand text-lg">
+            <XiaojuImage scene="listen" className="size-9 overflow-hidden rounded-xl border border-line bg-paper-2" />
+            和小局的对话
+          </h2>
           <div className="mt-3 space-y-2.5">
             {entry.messages.map((m) => (
               <div key={m.id} className={m.role === "user" ? "text-right" : ""}>

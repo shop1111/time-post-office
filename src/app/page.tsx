@@ -1,3 +1,4 @@
+import { XiaojuImage } from "@/components/XiaojuImage";
 import Link from "next/link";
 import { Camera, Mic, PenLine, ArrowRight, Package, Mail } from "lucide-react";
 import { db } from "@/lib/db";
@@ -44,15 +45,18 @@ export default async function Home() {
   return (
     <div className="space-y-8">
       {/* 问候 */}
-      <section className="pt-2">
-        <div className="text-sm text-ink-3">{fmtCN(t)} · 小局认识你的第 {days} 天</div>
-        <h1 className="mt-1 font-hand text-3xl md:text-4xl">
-          {greeting(t.getHours())}，{profile.name}。
-        </h1>
-        <p className="mt-2 max-w-2xl text-[15px] leading-7 text-ink-2">
-          {letters.length ? `有 ${letters.length} 封信在等你拆开。` : "今天还没有新的信。"}
-          想记下点什么，就放一颗胶囊；想对谁说点什么，就写一封信。
-        </p>
+      <section className="flex items-center justify-between gap-3 pt-2 sm:gap-6">
+        <div className="min-w-0">
+          <div className="text-sm text-ink-3">{fmtCN(t)} · 小局认识你的第 {days} 天</div>
+          <h1 className="mt-1 font-hand text-3xl md:text-4xl">
+            {greeting(t.getHours())}，{profile.name}。
+          </h1>
+          <p className="mt-2 max-w-2xl text-[15px] leading-7 text-ink-2">
+            {letters.length ? `有 ${letters.length} 封信在等你拆开。` : "今天还没有新的信。"}
+            想记下点什么，就放一颗胶囊；想对谁说点什么，就写一封信。
+          </p>
+        </div>
+        <XiaojuImage scene="home" className="h-24 w-20 self-end sm:h-36 sm:w-36 md:h-44 md:w-44" />
       </section>
 
       {/* 两条主线：胶囊 / 邮件 */}

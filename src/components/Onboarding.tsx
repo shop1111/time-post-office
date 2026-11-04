@@ -1,10 +1,10 @@
 "use client";
 
+import { XiaojuImage } from "@/components/XiaojuImage";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Logo } from "./Nav";
 import { DemoButton } from "./DemoButton";
 
 export function Onboarding() {
@@ -17,7 +17,7 @@ export function Onboarding() {
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center pt-8 text-center md:pt-16">
       <motion.div initial={{ scale: 0.6, rotate: -10, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 160 }}>
-        <Logo size={72} />
+        <XiaojuImage scene="welcome" className="h-40 w-36 sm:h-52 sm:w-44" priority />
       </motion.div>
       <h1 className="mt-6 font-hand text-4xl">欢迎来到时光邮局</h1>
       <p className="mt-4 text-[15px] leading-8 text-ink-2">
