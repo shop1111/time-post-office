@@ -70,13 +70,24 @@ async function currentCard(entryId: string): Promise<FinalizeResult["card"]> {
   const card = await db.storyCard.findFirst({ where: { entryId }, orderBy: { createdAt: "desc" } });
   return card ? { ...card, createdAt: card.createdAt.toISOString() } : null;
 }
-/** 已保存的任务结果会过时：卡片可能被重新生成，记忆可能被撤回。返回前按当前数据刷新这两项。 */
+/** 已保存的任务结果会过时：卡片可能被重新生成，记忆可能被更正/撤回。返回前按当前数据刷新这两项。 */
 async function withCurrentState(state: FinalizeStatusResponse, entryId: string): Promise<FinalizeStatusResponse> {
   if (!state.result) return state;
-  const active = new Set((await db.memory.findMany({
-    where: { id: { in: state.result.memories.map((m) => m.id) }, ...ACTIVE_MEMORY }, select: { id: true },
-  })).map((m) => m.id));
-  return { ...state, result: { ...state.result, card: await currentCard(entryId), memories: state.result.memories.filter((m) => active.has(m.id)) } };
+  const rows = await db.memory.findMany({
+    where: { id: { in: state.result.memories.map((m) => m.id) }, ...ACTIVE_MEMORY },
+    select: { id: true, kind: true, content: true, importance: true, dueAt: true,
+      entities: { select: { entity: { select: { name: true, type: true } } } },
+    },
+  });
+  const current = new Map(rows.map((m) => [m.id, {
+    id: m.id, kind: m.kind, content: m.content, importance: m.importance, dueAt: m.dueAt?.toISOString() ?? null,
+    entities: m.entities.map(({ entity }) => ({ name: entity.name, type: entity.type })),
+  }]));
+  const memories = state.result.memories.flatMap((memory) => {
+    const updated = current.get(memory.id);
+    return updated ? [updated] : [];
+  });
+  return { ...state, result: { ...state.result, card: await currentCard(entryId), memories } };
 }
 
 async function resultOf(run: Run): Promise<FinalizeResult> {
