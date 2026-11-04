@@ -20,7 +20,10 @@ export function MemorySort({ value, onChange }: { value: string; onChange: (valu
       menu.current!.open = true;
       const buttons = [...menu.current!.querySelectorAll("button")];
       const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-      const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (current + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length;
+      const next = event.key === "Home" ? 0
+        : event.key === "End" ? buttons.length - 1
+        : current < 0 ? (event.key === "ArrowUp" ? buttons.length - 1 : 0)
+        : (current + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length;
       buttons[next]?.focus();
     }
   }}>
