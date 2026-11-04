@@ -15,7 +15,7 @@ export default async function RecordPage({ searchParams }: { searchParams: Promi
 
 /** 刷新 /capsules/new?entry=... 时接着上次：还在追问就恢复对话，已经在收进邮局就接上进度 */
 async function loadResume(id: string): Promise<ResumeState | null> {
-  const entry = await db.entry.findUnique({ where: { id }, include: { messages: { orderBy: { createdAt: "asc" } } } });
+  const entry = await db.entry.findUnique({ where: { id }, include: { messages: { orderBy: { createdAt: "asc" } }, conversation: { include: { turns: { orderBy: { createdAt: "desc" }, take: 1 } } } } });
   if (!entry) return null;
   const job = await getFinalizeStatus(id).catch((e) => {
     if (e instanceof JobRequestError && e.code === "JOB_NOT_FOUND") return null;
@@ -34,5 +34,8 @@ async function loadResume(id: string): Promise<ResumeState | null> {
     },
     messages: entry.messages.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.content })),
     job,
+    conversationStatus: entry.conversation?.status ?? "offered",
+    pendingTurn: entry.conversation?.status === "active" && entry.conversation.turns[0] && ["running", "failed"].includes(entry.conversation.turns[0].status)
+      ? { requestId: entry.conversation.turns[0].requestId, userText: entry.conversation.turns[0].userText } : null,
   };
 }
