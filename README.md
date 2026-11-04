@@ -200,7 +200,7 @@ Dockerfile · docker-compose.yml
 ## 文档
 
 - [docs/DEPLOY.md](docs/DEPLOY.md) — 部署到服务器、多用户与数据隔离
-- [docs/DEMO.md](docs/DEMO.md) — 演示脚本
+- [docs/DEMO.md](docs/DEMO.md) — 三分钟演示脚本
 - [docs/CURATOR.md](docs/CURATOR.md) — 小局的人设、对话策略、防御层与评测
 - [docs/MEMORY_CONTROL.md](docs/MEMORY_CONTROL.md) — 记忆更正与撤回
 - [docs/MEMORY_CONSISTENCY.md](docs/MEMORY_CONSISTENCY.md) — 记忆一致性与派生数据失效
@@ -209,5 +209,7 @@ Dockerfile · docker-compose.yml
 ## 许可证
 
 [MIT](LICENSE) © 2026 shop1111
+
+代码和小局的形象素材（`public/xiaoju/`）版权都归本项目作者所有，一并按 MIT 发布。
 
 使用本项目接入第三方模型服务时，请同时遵守对应服务商的使用条款。
