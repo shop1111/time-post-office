@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import type { MouseEvent } from "react";
 import { Home, Package, Mail, Brain, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MEMORY_LOCATION_KEY } from "@/components/memory/MemoryNavigation";
 
 const TABS = [
   { href: "/", label: "主页", icon: Home },
@@ -14,6 +16,17 @@ const TABS = [
 
 export function Nav({ unread, today }: { unread: number; today: string }) {
   const path = usePathname();
+  const router = useRouter();
+  function resumeMemory(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (href !== "/memory" || path.startsWith("/memory") || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    try {
+      const saved = sessionStorage.getItem(MEMORY_LOCATION_KEY);
+      if (saved && /^\/memory\/(people|places|events|preferences|goals|facts)(\/[^/?#]+)?$/.test(saved)) {
+        event.preventDefault();
+        router.push(saved, { scroll: false });
+      }
+    } catch { /* Fall back to the normal link when storage is disabled. */ }
+  }
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   const d = new Date(today);
   return (
@@ -29,6 +42,7 @@ export function Nav({ unread, today }: { unread: number; today: string }) {
               <Link
                 key={t.href}
                 href={t.href}
+                onClick={(event) => resumeMemory(event, t.href)}
                 className={cn(
                   "relative rounded-full px-3 py-1.5 text-sm transition",
                   active(t.href) ? "bg-card text-ink shadow-sm" : "text-ink-2 hover:text-ink",
@@ -57,7 +71,7 @@ export function Nav({ unread, today }: { unread: number; today: string }) {
             const Icon = t.icon;
             const on = active(t.href);
             return (
-              <Link key={t.href} href={t.href} className={cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", on ? "text-stamp" : "text-ink-3")}>
+              <Link key={t.href} href={t.href} onClick={(event) => resumeMemory(event, t.href)} className={cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", on ? "text-stamp" : "text-ink-3")}>
                 <Icon size={21} strokeWidth={on ? 2.2 : 1.7} />
                 {t.label}
                 {t.href === "/mail" && unread > 0 && <Badge n={unread} mobile />}
