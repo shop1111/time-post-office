@@ -10,19 +10,31 @@ import { cn, fmtCN, monthKey, moodColor, moodEmoji, photoUrl } from "@/lib/utils
 export default async function Capsules({ searchParams }: { searchParams: Promise<{ tag?: string }> }) {
   const { tag } = await searchParams;
   const t = await now();
+  const visibleCapsules = { ...CAPSULE_WHERE, occurredAt: { lte: t } };
   const [entries, entities] = await Promise.all([
     db.entry.findMany({
       where: {
-        ...CAPSULE_WHERE,
-        occurredAt: { lte: t },
+        ...visibleCapsules,
         ...(tag ? { memories: { some: { ...ACTIVE_MEMORY, entities: { some: { entity: { name: tag } } } } } } : {}),
       },
       orderBy: { occurredAt: "desc" },
       include: { cards: true },
     }),
-    db.entity.findMany({ where: { type: { in: ["person", "place"] } }, include: { _count: { select: { memories: { where: { memory: ACTIVE_MEMORY } } } } } }),
+    db.entity.findMany({
+      where: { type: { in: ["person", "place"] } },
+      include: {
+        memories: {
+          where: { memory: { ...ACTIVE_MEMORY, entry: visibleCapsules } },
+          select: { memory: { select: { entryId: true } } },
+        },
+      },
+    }),
   ]);
-  const tags = entities.filter((e) => e._count.memories >= 2).sort((a, b) => b._count.memories - a._count.memories).slice(0, 12);
+  const tags = entities
+    .map((e) => ({ ...e, capsuleCount: new Set(e.memories.map(({ memory }) => memory.entryId)).size }))
+    .filter((e) => e.capsuleCount >= 2)
+    .sort((a, b) => b.capsuleCount - a.capsuleCount)
+    .slice(0, 12);
 
   const months = new Map<string, typeof entries>();
   for (const e of entries) {
@@ -48,7 +60,7 @@ export default async function Capsules({ searchParams }: { searchParams: Promise
           </Link>
           {tags.map((e) => (
             <Link key={e.id} href={`/capsules?tag=${encodeURIComponent(e.name)}`} className={cn("chip shrink-0 !py-1", tag === e.name && "!bg-stamp !text-white")}>
-              {e.type === "person" ? "👤" : "📍"} {e.name} <span className="opacity-60">{e._count.memories}</span>
+              {e.type === "person" ? "👤" : "📍"} {e.name} <span className="opacity-60">{e.capsuleCount}</span>
             </Link>
           ))}
         </div>

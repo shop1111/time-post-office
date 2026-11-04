@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent } from "react";
-import { Home, Package, Mail, Brain, Settings } from "lucide-react";
+import { Home, Package, Mail, Brain, Settings, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MEMORY_LOCATION_KEY } from "@/components/memory/MemoryNavigation";
 
@@ -11,6 +11,7 @@ const TABS = [
   { href: "/", label: "主页", icon: Home },
   { href: "/capsules", label: "胶囊", icon: Package },
   { href: "/mail", label: "邮件", icon: Mail },
+  { href: "/chat", label: "小局", icon: MessageCircle },
   { href: "/memory", label: "记忆", icon: Brain },
 ];
 
@@ -66,7 +67,7 @@ export function Nav({ unread, today }: { unread: number; today: string }) {
 
       {/* 移动端底部 Tab */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid max-w-md grid-cols-5">
           {TABS.map((t) => {
             const Icon = t.icon;
             const on = active(t.href);
