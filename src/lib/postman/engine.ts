@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now as clockNow } from "@/lib/clock";
 import { logError } from "@/lib/errors";
+import { PostmanContextChangedError } from "@/lib/letters/snapshot";
 import { collectCandidates, type Snapshot } from "./triggers";
 import { AlreadySentError, writeLetter } from "./writer";
 import { serializePostman } from "./queue";
@@ -14,7 +15,11 @@ const MIN_GAP_HOURS = 20;
 const STAGES: PostmanStage[] = ["retrieve", "generate", "check", "deliver"];
 export async function buildSnapshot(now: Date): Promise<Snapshot> {
   const [entries, memories] = await Promise.all([
-    db.entry.findMany({ select: { id: true, occurredAt: true, mood: true, title: true, type: true } }),
+    db.entry.findMany({
+      // 与月度回忆一致；空关系的 every 也为真，必须用 some 区分尚未抽取的记录。
+      where: { NOT: { AND: [{ memories: { some: {} } }, { memories: { every: { status: "retracted" } } }] } },
+      select: { id: true, occurredAt: true, mood: true, title: true, type: true },
+    }),
     db.memory.findMany({ where: ACTIVE_MEMORY, include: { entities: { include: { entity: true } } } }),
   ]);
   const existing = new Set(entries.filter((entry) => entry.occurredAt <= now).map((entry) => entry.id));
@@ -106,7 +111,9 @@ export async function tickWithinAction(opts: TickOptions = {}): Promise<TickResu
         } else {
           decision.outcome = "failed";
           const failed = decision.stages.find((stage) => stage.status === "failed")?.name;
-          decision.error = { code: `POSTMAN_${(failed ?? "LETTER").toUpperCase()}_FAILED`, message: "这封信处理失败，其他信件照常继续", retryable: true };
+          decision.error = error instanceof PostmanContextChangedError
+            ? { code: error.code, message: error.message, retryable: error.retryable }
+            : { code: `POSTMAN_${(failed ?? "LETTER").toUpperCase()}_FAILED`, message: "这封信处理失败，其他信件照常继续", retryable: true };
           logError(`postman.${failed ?? "letter"}`, error);
         }
         for (const name of STAGES) if (!decision.stages.some((stage) => stage.name === name)) stageChanged({ name, status: "skipped", durationMs: 0 });

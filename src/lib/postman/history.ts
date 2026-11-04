@@ -10,7 +10,11 @@ export function writtenDayEnd(writtenAt: Date): Date {
 
 export async function historicalStyle(before: Date) {
   const entries = await db.entry.findMany({
-    where: { occurredAt: { lt: before } }, orderBy: { occurredAt: "desc" }, take: 80,
+    where: {
+      occurredAt: { lt: before },
+      // 与画像一致：更正/撤回后，原记录仍保留，但不能继续作为原话样本。
+      memories: { some: { status: "active" }, none: { OR: [{ status: "retracted" }, { userEdited: true }] } },
+    }, orderBy: { occurredAt: "desc" }, take: 80,
     include: { messages: { where: { role: "user", createdAt: { lt: before } } } },
   });
   const style = computeStyle(entries.flatMap((entry) => [entry.text, entry.transcript ?? "", ...entry.messages.map((message) => message.content)]).filter(Boolean));

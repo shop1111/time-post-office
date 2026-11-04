@@ -9,7 +9,8 @@ import { extractEntry, persistEntry } from "@/lib/memory/extract";
 import { embed } from "@/lib/ai/provider";
 import { refreshProfile } from "@/lib/memory/profile";
 import { generateStoryCard } from "@/lib/story";
-import { startFinalize } from "@/lib/jobs";
+import { getFinalizeStatus, startFinalize } from "@/lib/jobs";
+import { correctMemory } from "@/lib/memory/manage";
 import { tryStartInterview } from "@/lib/entry-work";
 import { getDerivedRevision, PROFILE_REVISION_KEY } from "@/lib/memory/consistency";
 import type { Extraction, FinalizeResult, FinalizeStatusResponse } from "@/lib/types";
@@ -285,6 +286,30 @@ describe("finalize with isolated SQLite", () => {
     await db.memory.update({ where: { id: gone.id }, data: { status: "retracted" } });
     expect((await jsonPost(entry.id)).memories.map((m) => m.id)).toEqual(kept.map((m) => m.id));
     expect((await get(entry.id)).result?.memories.map((m) => m.id)).toEqual(kept.map((m) => m.id));
+  });
+  it("更正后恢复任务返回当前记忆字段，保留结果顺序和阶段执行记录", async () => {
+    const entry = await create();
+    const first = await jsonPost(entry.id);
+    const before = await getFinalizeStatus(entry.id);
+    expect(first.memories.length).toBeGreaterThan(1);
+    // 结果顺序不依赖数据库 findMany 的返回顺序。
+    const order = [...first.memories].reverse();
+    const job = await db.job.findFirstOrThrow({ where: { targetId: entry.id } });
+    await db.job.update({ where: { id: job.id }, data: { result: JSON.stringify({ ...first, memories: order }) } });
+    const target = await db.memory.findUniqueOrThrow({ where: { id: first.memories[0].id } });
+    await correctMemory(target.id, { expectedRevision: target.revision, content: "后来更正为独自在图书馆学习", importance: 9, entities: [{ name: "图书馆", type: "place" }] });
+    const dueAt = new Date("2026-12-01T12:00:00Z");
+    await db.memory.update({ where: { id: target.id }, data: { dueAt } });
+    const restored = await getFinalizeStatus(entry.id);
+    expect(restored.result?.memories.map(m => m.id)).toEqual(order.map(m => m.id));
+    expect(restored.result?.memories.find(m => m.id === target.id)).toEqual({
+      id: target.id, kind: target.kind, content: "后来更正为独自在图书馆学习", importance: 9, dueAt: dueAt.toISOString(), entities: [{ name: "图书馆", type: "place" }],
+    });
+    expect(restored.stages).toEqual(before.stages);
+    expect(restored.result?.executions).toEqual(first.executions);
+    expect((await jsonPost(entry.id)).memories).toEqual(restored.result?.memories);
+    expect(extractEntry).toHaveBeenCalledTimes(1);
+    expect(generateStoryCard).toHaveBeenCalledTimes(1);
   });
   it("缺失记录/任务返回约定404错误体", async () => {
     expect((await POST(request(), context("missing"))).status).toBe(404);

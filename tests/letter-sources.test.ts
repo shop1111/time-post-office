@@ -81,7 +81,7 @@ it.each(["unchecked", "passed", "rewritten", "failed"] as const)("写信落库�
   expect(JSON.parse(letter.citedMemoryIds)).toEqual([mem.id]);
   if (status === "rewritten" || status === "failed") expect(letter.body).toBe(revised);
 });
-it("生成期间记忆已更正，入库核对后移除该引用并标记未核查", async () => {
+it("生成期间引用记忆正文已更正，即使未更新版本号也不投递", async () => {
   const mem = await memory();
   vi.stubEnv("CHAT_API_KEY", "test-only-placeholder"); vi.stubEnv("CHAT_MODEL", "test-model"); vi.stubEnv("CHAT_BASE_URL", "https://compatible.example/v1");
   let call = 0;
@@ -90,8 +90,7 @@ it("生成期间记忆已更正，入库核对后移除该引用并标记未核�
     if (call === 2) await db.memory.update({ where: { id: mem.id }, data: { content: "更正后的新原文" } });
     return Response.json({ choices: [{ message: { content: JSON.stringify(value) } }] });
   });
-  const letter = await writeLetter({ key: "race", type: "anniversary", sender: "postman", priority: 1, reason: "回顾", writtenAt: date, anchorMemoryIds: [mem.id], query: "西湖", entities: [] }, new Date());
-  expect(letter.checkStatus).toBe("unchecked");
-  expect(JSON.parse(letter.citedSnapshot)).toEqual([]); expect(JSON.parse(letter.citedMemoryIds)).toEqual([]);
-  expect((await letterSources(letter.id))!.sentences.every((sentence) => !sentence.sources.length)).toBe(true);
+  await expect(writeLetter({ key: "race", type: "anniversary", sender: "postman", priority: 1, reason: "回顾", writtenAt: date, anchorMemoryIds: [mem.id], query: "西湖", entities: [] }, new Date()))
+    .rejects.toMatchObject({ code: "POSTMAN_CONTEXT_CHANGED", retryable: true });
+  expect(await db.letter.count()).toBe(0);
 });

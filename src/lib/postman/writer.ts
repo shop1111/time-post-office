@@ -13,7 +13,7 @@ import type { ExecutionInfo, PostmanStage, PostmanStageInfo } from "@/lib/types"
 import type { LetterCandidate } from "./triggers";
 import { checkLetter } from "./check";
 import { historicalStyle, writtenDayEnd } from "./history";
-import { verifiedSnapshots } from "@/lib/letters/snapshot";
+import { assertMemoryContext, verifiedSnapshots } from "@/lib/letters/snapshot";
 
 export class AlreadySentError extends Error {
   constructor(public readonly letterId: string) { super("Trigger already has a letter"); this.name = "AlreadySentError"; }
@@ -63,7 +63,7 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
     const entities = before ? [...new Set(anchors.flatMap((m) => m.entities.filter((e) => m.content.includes(e.entity.name)).map((e) => e.entity.name)))] : c.entities;
     const writingReason = before ? c.type === "open_loop" ? "把当时的计划写给未来，问问后来怎么样了；那个日子应该已经到了" : "把落款这一天已经知道的生活，写给未来的自己" : c.reason;
     const extra = await retrieve({ query, now: before ? c.writtenAt : now, k: 5, entities, weights: NOSTALGIA_WEIGHTS, before, onExecution });
-    const anchorMems: RetrievedMemory[] = anchors.map((a) => ({ id: a.id, kind: a.kind, content: a.content, importance: a.importance, occurredAt: a.occurredAt, entryId: a.entryId,
+    const anchorMems: RetrievedMemory[] = anchors.map((a) => ({ id: a.id, revision: a.revision, kind: a.kind, content: a.content, importance: a.importance, occurredAt: a.occurredAt, entryId: a.entryId,
       entities: a.entities.map((e) => e.entity.name), score: 99, parts: { sim: 1, recency: 0, importance: a.importance / 10, entity: 1 } }));
     const mems = [...anchorMems, ...extra.filter((e) => !c.anchorMemoryIds.includes(e.id))].slice(0, 7);
     if (before) profile.summary = mems.map((memory) => memory.content).join("；");
@@ -91,6 +91,7 @@ export async function writeLetter(c: LetterCandidate, now: Date, onStage?: (stag
   return stage("deliver", async () => {
     try {
       return await db.$transaction(async (tx) => {
+        await assertMemoryContext(tx, mems);
         const { snapshots, changed } = await verifiedSnapshots(tx, cited, mems);
         return tx.letter.create({ data: {
           sender: c.sender, subject: draft.subject, body: checked.body.trim(), triggerType: c.type, triggerKey: c.key,
