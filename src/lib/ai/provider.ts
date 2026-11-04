@@ -123,7 +123,7 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
       const controller = new AbortController();
       const signal = AbortSignal.any([budget.signal, controller.signal]);
       let firstTimer: ReturnType<typeof setTimeout> | undefined;
-      let alive = false;
+      let lastActivity: number | undefined;
       try {
         release = await acquire(budget.signal);
         firstTimer = setTimeout(() => controller.abort(), positiveEnv("AI_STREAM_FIRST_TIMEOUT_MS", 15_000));
@@ -137,7 +137,9 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
         let buf = "";
         let complete = false;
         for (;;) {
-          const idle = alive ? setTimeout(() => controller.abort(), positiveEnv("AI_STREAM_IDLE_TIMEOUT_MS", 15_000)) : undefined;
+          // 心跳、空delta、被拆开的字节不能续期；正文与推理内容共用响应活动计时。
+          const idle = lastActivity === undefined ? undefined : setTimeout(() => controller.abort(),
+            Math.max(0, positiveEnv("AI_STREAM_IDLE_TIMEOUT_MS", 15_000) - (Date.now() - lastActivity)));
           let chunk: ReadableStreamReadResult<Uint8Array>;
           try { chunk = await bounded(reader.read(), signal); }
           finally { clearTimeout(idle); }
@@ -155,7 +157,7 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
             const reasoning = choice?.delta?.reasoning_content;
             const delta = choice?.delta?.content;
             if ((typeof reasoning === "string" && reasoning.length) || (typeof delta === "string" && delta.length)) {
-              alive = true;
+              lastActivity = Date.now();
               clearTimeout(firstTimer);
             }
             if (typeof delta === "string" && delta.length) {

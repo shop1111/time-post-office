@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { chat, chatStream, ChatStreamError, describeImage, embed, roleConfig, transcribe } from "@/lib/ai/provider";
+import { callTimeout, chat, chatStream, ChatStreamError, describeImage, embed, roleConfig, transcribe } from "@/lib/ai/provider";
 import { chatJson } from "@/lib/ai/json";
+import { recentAiCalls } from "@/lib/ai/telemetry";
 import type { ExecutionInfo } from "@/lib/types";
 
 const messages = [{ role: "user" as const, content: "测试日记" }];
@@ -13,6 +14,7 @@ const delayed = <T>(value: T, ms: number) => new Promise<T>((resolve) => setTime
 
 beforeEach(() => {
   vi.useFakeTimers();
+  (globalThis as unknown as { aiRecentCalls: unknown[] }).aiRecentCalls.length = 0;
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubEnv("CHAT_API_KEY", "test-only-placeholder");
@@ -181,6 +183,54 @@ describe("Provider budgets, retries and execution", () => {
 });
 
 describe("stream lifecycle", () => {
+  it("正文后只有SSE心跳，不能不断重置空闲超时", async () => {
+    vi.stubEnv("CHAT_THINKING", "on");
+    let timer: ReturnType<typeof setInterval>;
+    const fetcher = fakeFetch(async () => new Response(new ReadableStream({
+      start(c) { c.enqueue(new TextEncoder().encode(delta("半句"))); timer = setInterval(() => c.enqueue(new TextEncoder().encode(": keepalive\n\n")), 20); },
+      cancel() { clearInterval(timer); },
+    })));
+    const onExecution = vi.fn();
+    const stream = chatStream(messages, { mock, onExecution });
+    expect((await stream.next()).value).toBe("半句");
+    let interrupted = false;
+    const next = stream.next().catch((error: unknown) => { interrupted = true; return error; });
+    await vi.advanceTimersByTimeAsync(50);
+    const interruptedOnIdle = interrupted;
+    await vi.runAllTimersAsync(); // 旧实现会直到总超时才中断；先清理，再断言边界。
+    expect(await next).toBeInstanceOf(ChatStreamError);
+    expect(interruptedOnIdle).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onExecution).toHaveBeenCalledTimes(1);
+    expect(recentAiCalls()).toHaveLength(1);
+    expect(recentAiCalls()[0]).toMatchObject({ mode: "fallback", fallbackReason: "timeout", durationMs: 50 });
+  });
+  it("持续推理仍受总预算限制，最终只记一次降级并释放并发槽", async () => {
+    vi.stubEnv("CHAT_THINKING", "on"); vi.stubEnv("AI_MAX_CONCURRENCY", "1");
+    let timer: ReturnType<typeof setInterval>, signal: AbortSignal | undefined;
+    const fetcher = fakeFetch(async (_url, init) => {
+      signal = init?.signal as AbortSignal;
+      return new Response(new ReadableStream({
+        start(c) {
+          const think = () => c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":"private reasoning"}}]}\n\n'));
+          think(); timer = setInterval(think, 30);
+        }, cancel() { clearInterval(timer); },
+      }));
+    });
+    const onExecution = vi.fn();
+    const result = collect(chatStream(messages, { mock, timeoutMs: 125, onExecution }));
+    await vi.advanceTimersByTimeAsync(125);
+    expect(signal?.aborted).toBe(true);
+    await vi.runAllTimersAsync();
+    expect(await result).toBe(mock());
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onExecution).toHaveBeenCalledTimes(1);
+    expect(recentAiCalls()).toHaveLength(1);
+    expect(recentAiCalls()[0]).toMatchObject({ mode: "fallback", fallbackReason: "timeout" });
+    expect(JSON.stringify(recentAiCalls())).not.toContain("private reasoning");
+    fakeFetch(async () => reply());
+    expect(await chat(messages, { mock })).toBe("远程回答");
+  });
   it("跨chunk的data行和无末尾换行的DONE正确解析", async () => {
     const bytes = new TextEncoder().encode(delta("你好") + "data: [DONE]");
     fakeFetch(async () => new Response(new ReadableStream({ start(c) { c.enqueue(bytes.slice(0, 7)); c.enqueue(bytes.slice(7)); c.close(); } })));
@@ -236,6 +286,9 @@ describe("stream lifecycle", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(onExecution.mock.calls[0][0].mode).toBe("remote");
     const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(onExecution).toHaveBeenCalledTimes(1);
+    expect(recentAiCalls()).toHaveLength(1);
+    expect(recentAiCalls()[0]).toMatchObject({ role: "chat", mode: "remote" });
     expect(body.thinking).toEqual({ type: "enabled" });
     expect(body.max_tokens).toBe(300 + 4000);
   });
@@ -266,6 +319,16 @@ describe("stream lifecycle", () => {
 });
 
 describe("JSON repair budget", () => {
+  it("思考默认预算放宽，但显式配置和调用方剩余预算优先", () => {
+    vi.stubEnv("AI_TIMEOUT_MS", ""); vi.stubEnv("CHAT_TIMEOUT_MS", "");
+    expect(callTimeout("chat")).toBe(45_000);
+    vi.stubEnv("CHAT_THINKING", "on");
+    expect(callTimeout("chat")).toBe(120_000);
+    vi.stubEnv("AI_TIMEOUT_MS", "60000"); expect(callTimeout("chat")).toBe(60_000);
+    vi.stubEnv("CHAT_TIMEOUT_MS", "80000"); expect(callTimeout("chat")).toBe(80_000);
+    expect(callTimeout("chat", { timeoutMs: 20 })).toBe(20);
+    expect(callTimeout("chat", { timeoutMs: 100_000 })).toBe(80_000);
+  });
   const schema = z.object({ title: z.string() });
   const local = () => ({ title: "本地标题" });
   it("格式错误独立修复，最终只回调一次", async () => {
