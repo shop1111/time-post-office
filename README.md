@@ -6,7 +6,7 @@
 > 写信给某个瞬间帮过你的人、平行时空的自己，TA 会在一天之内回信（由 agent 以 TA 的身份代笔）；写给未来的自己，到了那天由真实的你收到。
 > 没事的时候，也可以去柜台和小局聊聊。
 
-不填任何 API Key 也能完整跑通（本地演示模式）；填上 DeepSeek 的 Key，就是真实模型。
+不填任何 API Key 也能完整跑通（本地演示模式）；填上 DeepSeek 的 Key，就是真实模型。支持多人部署：注册账号即可使用，每个账号的数据独立存放、互不可见。
 
 ## 快速开始
 
@@ -19,8 +19,6 @@ npm run dev
 
 打开 http://localhost:3000 ，先注册一个账号，然后在首页或 **设置 → 示例数据** 点「导入示例数据」，就能看到「林小满在杭州的半年」。也可以用 `npm run seed -- <用户名>` 从命令行导入。
 
-多人使用：每个账号有自己独立的数据库和上传目录，互不可见。部署到服务器（Docker / Node、Nginx、HTTPS、邀请码、备份、从单用户版本迁移）见 [docs/DEPLOY.md](docs/DEPLOY.md)。
-
 接入真实模型：在 `.env` 里填 `CHAT_API_KEY`（DeepSeek），重启即可。看图、向量、语音各自独立配置，见 [.env.example](.env.example)。本地开发时把 `ENABLE_LOCAL_MODEL_SETTINGS` 设为 `1`，可以直接在设置页临时切换模型（重启后恢复，公开部署请保持关闭）。
 
 ```bash
@@ -32,20 +30,51 @@ npm run eval:curator   # 小局对话评测（需要真实 Key，加 -- --baseli
 
 演示流程见 [docs/DEMO.md](docs/DEMO.md)。
 
+## 部署
+
+部署好之后，大家打开网址、注册账号就能用。推荐 Docker：
+
+```bash
+cp .env.example .env      # 填 CHAT_API_KEY 等密钥；公网部署务必设置 INVITE_CODE
+docker compose up -d --build
+```
+
+服务在 `3000` 端口，数据挂载在项目目录下的 `./data`；每次启动会自动把所有用户库同步到最新结构。不用 Docker 时：`npm ci && npm run build && npm run start:server`（需要 Node.js 20+）。
+
+| 配置（`.env`） | 说明 |
+| --- | --- |
+| `ALLOW_REGISTRATION` | `1` 开放注册（默认），`0` 只允许已有账号登录 |
+| `INVITE_CODE` | 填了之后注册必须输入邀请码，避免陌生人消耗你的模型额度 |
+| `MAX_USERS` | 账号数量上限，留空不限 |
+| `DATA_DIR` | 数据目录，默认 `./data` |
+| `COOKIE_SECURE` | 登录 Cookie 的 Secure 标记，默认按访问协议（含 `X-Forwarded-Proto`）自动判断 |
+| `ENABLE_LOCAL_MODEL_SETTINGS` | 公开部署保持 `0` |
+
+模型密钥是服务器级别的，所有账号共用，用户看不到。请只跑**一个**服务进程（限流和追问锁在进程内存里），适合几十到几百人的规模。
+
+```bash
+npm run db:push                         # 改了 schema 后，同步模板、账号库和所有用户库
+npm run seed -- <用户名>                 # 给某个账号导入示例数据（会替换该账号现有的数据）
+npm run user:adopt-legacy -- <用户名>    # 把单用户旧版的 data/app.db 和 data/uploads 归到某个账号下
+```
+
+Nginx 反向代理（SSE 要关缓冲）、HTTPS、备份、从单用户版本迁移，详见 [docs/DEPLOY.md](docs/DEPLOY.md)。
+
 ## 页面一览
 
-导航：**主页 / 胶囊 / 邮件 / 小局 / 记忆**，另有设置页和「它是怎么工作的」架构页（`/about`）。
+导航：**主页 / 胶囊 / 邮件 / 小局 / 记忆**，另有设置页和「它是怎么工作的」架构页（`/about`）。没登录时只能访问登录、注册和架构页。
 
 | 页面 | 能做什么 |
 | --- | --- |
+| 🔑 登录 / 注册 | 用户名 + 密码（可要求邀请码），登录状态保持 30 天 |
 | 🏠 主页 | 最新一封未拆的信是首屏主角，旁边是「放一颗胶囊」「写一封信」；下方是最近的故事卡片和「小局眼中的你」 |
 | 📦 胶囊 | 照片 / 语音 / 文字三种胶囊。照片自动读 EXIF 时间和 GPS（离线逆地理编码出「洱海」），小局追问 2~4 轮并「想起」旧记忆，收进邮局时显示真实阶段进度；列表按月分组，可按人物 / 地点标签筛选 |
 | 🎞️ 故事卡片 | 每颗胶囊整理好后写成一张小说片段式卡片，四种模板（明信片 / 胶片 / 信纸 / 夜空），可导出图片 |
 | 📅 月度回忆 | 情绪天气曲线、高光时刻、常出现的人和地方、一段月度叙事，可导出分享长图 |
 | ✉️ 邮件 | 收件箱（未拆 / 已拆）、寄出的信、收件人；每位收件人有往来信件串 |
-| 💬 小局 | 「和小局聊聊」：胶囊之外随时闲聊，小局会参考你的记忆接话；历史保存在本地，可清空 |
+| 💬 小局 | 「和小局聊聊」：胶囊之外随时闲聊，小局会参考你的记忆接话；历史保存在你的账号里，可清空 |
 | 🧠 记忆 | 小局眼中的你（画像）、文风指纹、**记忆地图**（人物 / 地点 / 经历 / 兴趣与偏好 / 计划与目标 / 重要事实），点进分类看详情和相关胶囊；**记忆管理**里更正或撤回任何一条记忆 |
-| ⚙️ 设置 | 称呼、模型状态、导入 / 清空示例数据、导出 JSON、演示工具（回信立即送达、让小局现在写一封信） |
+| ⚙️ 设置 | 当前账号与退出登录、称呼、模型状态、导入 / 清空示例数据、导出 JSON、演示工具（回信立即送达、让小局现在写一封信） |
 
 时间一律是真实的今天：胶囊时间、「那个瞬间」、分岔点只能选过去，写给未来的信只能送往未来，前后端都校验。
 
@@ -123,14 +152,35 @@ score = 1.0·语义相似 + 0.35·0.5^(Δt/45天) + 0.45·重要度 + 0.5·实�
 
 界面上每一步都标着「真实模型 / 本地演示 / 已降级 / 防御层」，数据来自后端实际执行情况；演示现场断网也不会白屏。
 
-### 6. 工程
+### 6. 多用户与数据隔离
 
-Next.js 15 App Router 全栈 · React 19 · TypeScript strict · Prisma + SQLite · SSE 流式输出（可中断、可重试、刷新后接着上次的进度） · 前端图片压缩 · Tailwind CSS 4 · framer-motion · recharts · html-to-image · vitest（13 个测试文件，覆盖检索打分、触发器、代笔回信、小局策略与防御、记忆更正 / 撤回、记忆地图、SSE、时间规则等）
+每个账号一份独立的 SQLite 数据库和上传目录，不和别人共用表：
+
+```
+data/
+├── auth.db                  账号和登录会话
+├── template.db              空模板，注册时复制一份给新用户
+└── users/<用户id>/
+    ├── app.db               这个人的胶囊、记忆、信件、收件人、画像……
+    └── uploads/             这个人的照片和语音
+```
+
+- 中间件先拦下没有登录 Cookie 的请求；每个 API 用 `withUser`、每个页面用 `userPage` 校验会话，再通过 AsyncLocalStorage 把「当前用户的库」交给业务代码（`src/lib/auth.ts`、`src/lib/tenancy.ts`）。
+- 业务代码照旧使用 `db`，但它只能解析到当前登录用户的库；没有用户上下文时直接报错，不存在「默认库」（`src/lib/db.ts`）。
+- 密码用 scrypt 加盐哈希；会话令牌只在 Cookie 里，库里存它的 SHA-256；登录按 IP 和按账号分别限流。
+- 聊天锁和限流按用户计算；照片语音只从当前账号的目录读取；导入示例、清空、导出都只作用于当前账号。
+
+### 7. 工程
+
+Next.js 15 App Router 全栈 · React 19 · TypeScript strict · Prisma + SQLite · SSE 流式输出（可中断、可重试、刷新后接着上次的进度） · 前端图片压缩 · Tailwind CSS 4 · framer-motion · recharts · html-to-image · Docker · vitest（14 个测试文件，覆盖检索打分、触发器、代笔回信、小局策略与防御、记忆更正 / 撤回、记忆地图、多用户数据隔离、SSE、时间规则等）
 
 ## 目录
 
 ```
-src/app/              页面与 API 路由
+src/app/              页面与 API 路由（含 /login、/register、/api/auth）
+src/middleware.ts     未登录请求的拦截
+src/lib/auth.ts       注册 / 登录 / 会话 · withUser / userPage
+src/lib/tenancy.ts    数据目录布局 · 每个用户的库与上传目录 · 连接缓存
 src/lib/ai/           provider（可插拔模型）· transport（超时 / 重试 / 并发）· json（结构化输出修复）· prompts · mock
 src/lib/curator/      小局：persona · world · relationship · planner · context · voice · letters · guard
 src/lib/memory/       embed-lite · rank · retrieve · extract · heuristics · style · profile · consistency · manage · map
@@ -139,12 +189,13 @@ src/lib/story.ts      故事卡片 & 月度回忆
 src/lib/demo/         示例人生数据 & 程序生成的插画
 src/components/       界面组件（record / mail / memory / chat / recap）
 public/xiaoju/        小局的形象素材
-scripts/              eval-curator（小局对话评测）
+scripts/              db-sync（同步所有库结构）· adopt-legacy（迁移单用户旧数据）· eval-curator（小局对话评测）
 tests/                vitest
-docs/                 设计说明与演示脚本
+docs/                 部署、设计说明与演示脚本
+Dockerfile · docker-compose.yml
 ```
 
-账号在 `data/auth.db`；每个账号的数据在 `data/users/<用户id>/app.db`，上传的照片和语音在同目录的 `uploads/`，可在设置页一键导出 JSON。
+所有数据都在 `data/` 目录里（结构见上文「多用户与数据隔离」），备份就是复制这个目录；每个用户也可以在设置页一键导出自己的 JSON。
 
 ## 文档
 
@@ -154,3 +205,9 @@ docs/                 设计说明与演示脚本
 - [docs/MEMORY_CONTROL.md](docs/MEMORY_CONTROL.md) — 记忆更正与撤回
 - [docs/MEMORY_CONSISTENCY.md](docs/MEMORY_CONSISTENCY.md) — 记忆一致性与派生数据失效
 - [docs/PROGRESS.md](docs/PROGRESS.md) — 项目进度与功能清单
+
+## 许可证
+
+[MIT](LICENSE) © 2026 shop1111
+
+使用本项目接入第三方模型服务时，请同时遵守对应服务商的使用条款。
