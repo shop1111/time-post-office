@@ -32,11 +32,54 @@ beforeEach(async () => {
   vi.mocked(collectCandidates).mockReset().mockImplementation(realCollect);
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubEnv("CHAT_API_KEY", ""); vi.stubEnv("EMBED_MODE", "lite"); vi.stubEnv("POSTMAN_DEBUG_FAIL", "");
-  await db.$transaction([db.letter.deleteMany(), db.entry.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany(), db.setting.deleteMany()]);
+  await db.$transaction([db.letter.deleteMany(), db.entry.deleteMany(), db.memory.deleteMany(), db.entity.deleteMany(), db.profile.deleteMany(), db.setting.deleteMany()]);
 });
 afterAll(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await f.fixture.cleanup(); });
 
 describe("postman actual decisions", () => {
+  it.each(["unchanged", "retracted", "corrected", "revision", "deleted"] as const)("核查期间未引用的上下文%s：核对全部记忆，冲突不占触发键", async (change) => {
+    vi.stubEnv("CHAT_API_KEY", "test-only-placeholder"); vi.stubEnv("CHAT_MODEL", "test-model"); vi.stubEnv("CHAT_BASE_URL", "https://compatible.example/v1");
+    const entry = await db.entry.create({ data: { type: "text", occurredAt: NOW } });
+    const anchor = await db.memory.create({ data: { entryId: entry.id, kind: "event", content: "我沿着西湖散步，看到了美丽的落日。", occurredAt: NOW } });
+    const background = await db.memory.create({ data: { entryId: entry.id, kind: "event", content: "未列入引用的记忆：后来和小林去喝茶。", occurredAt: NOW } });
+    const draftInputs: string[] = [];
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+      calls++;
+      if (calls % 2 === 1) {
+        draftInputs.push(String(init.body));
+        return Response.json({ choices: [{ message: { content: JSON.stringify({ subject: "西湖", body: anchor.content.repeat(4), cited: [anchor.id] }) } }] });
+      }
+      if (calls === 2) {
+        if (change === "retracted") await db.memory.update({ where: { id: background.id }, data: { status: "retracted", revision: { increment: 1 } } });
+        if (change === "corrected") await db.memory.update({ where: { id: background.id }, data: { content: "更正后的背景事实", revision: { increment: 1 } } });
+        if (change === "revision") await db.memory.update({ where: { id: background.id }, data: { importance: 9, revision: { increment: 1 } } });
+        if (change === "deleted") await db.memory.delete({ where: { id: background.id } });
+      }
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ ok: true, issues: [] }) } }] });
+    }));
+    const key = "context-race";
+    vi.mocked(collectCandidates).mockReturnValue([{ ...candidate(key, "open_loop"), anchorMemoryIds: [anchor.id] }]);
+    const events: PostmanDecision[] = [];
+    const result = await tick({ now: NOW, ignoreGap: true, onDecision: d => events.push(d) });
+    expect(calls).toBe(2);
+    expect(draftInputs[0]).toContain(background.content);
+    if (change === "unchanged") {
+      expect(result.decisions[0].outcome).toBe("generated");
+    } else {
+      expect(result.generated).toEqual([]);
+      expect(result.decisions[0]).toMatchObject({ outcome: "failed", error: { code: "POSTMAN_CONTEXT_CHANGED", retryable: true } });
+      expect(events.at(-1)).toMatchObject({ outcome: "failed", error: { code: "POSTMAN_CONTEXT_CHANGED", retryable: true } });
+      expect(result.decisions[0].stages.at(-1)).toMatchObject({ name: "deliver", status: "failed" });
+      expect(await db.letter.count()).toBe(0);
+      expect((await tick({ now: NOW, ignoreGap: true })).decisions[0].outcome).toBe("generated");
+    }
+    const letter = await db.letter.findUniqueOrThrow({ where: { triggerKey: key } });
+    expect(letter.checkStatus).toBe("passed");
+    expect(JSON.parse(letter.citedMemoryIds)).toEqual([anchor.id]);
+    expect(JSON.parse(letter.citedSnapshot)).toEqual([{ memoryId: anchor.id, entryId: entry.id, content: anchor.content, occurredAt: NOW.toISOString() }]);
+    expect(await db.letter.count()).toBe(1);
+  });
   it("所有候选在同一执行分支得到去向，保留前8项和完整排名", async () => {
     const old = await existing("old");
     const candidates = [candidate("old", "anniversary", 100), candidate("loop1", "open_loop", 90), candidate("loop2", "open_loop", 80), candidate("person", "milestone", 70), ...Array.from({ length: 6 }, (_, i) => candidate(`anniv${i}`, "anniversary", 60 - i))];

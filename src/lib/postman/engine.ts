@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 import { now as clockNow } from "@/lib/clock";
 import { logError } from "@/lib/errors";
+import { PostmanContextChangedError } from "@/lib/letters/snapshot";
 import { collectCandidates, type Snapshot } from "./triggers";
 import { AlreadySentError, writeLetter } from "./writer";
 import { serializePostman } from "./queue";
@@ -106,7 +107,9 @@ export async function tickWithinAction(opts: TickOptions = {}): Promise<TickResu
         } else {
           decision.outcome = "failed";
           const failed = decision.stages.find((stage) => stage.status === "failed")?.name;
-          decision.error = { code: `POSTMAN_${(failed ?? "LETTER").toUpperCase()}_FAILED`, message: "这封信处理失败，其他信件照常继续", retryable: true };
+          decision.error = error instanceof PostmanContextChangedError
+            ? { code: error.code, message: error.message, retryable: error.retryable }
+            : { code: `POSTMAN_${(failed ?? "LETTER").toUpperCase()}_FAILED`, message: "这封信处理失败，其他信件照常继续", retryable: true };
           logError(`postman.${failed ?? "letter"}`, error);
         }
         for (const name of STAGES) if (!decision.stages.some((stage) => stage.name === name)) stageChanged({ name, status: "skipped", durationMs: 0 });

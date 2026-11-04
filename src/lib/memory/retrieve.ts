@@ -6,6 +6,7 @@ import { DEFAULT_WEIGHTS, mmr, scoreCandidates, type Candidate, type RankWeights
 
 export interface RetrievedMemory {
   id: string;
+  revision: number;
   kind: string;
   content: string;
   importance: number;
@@ -84,6 +85,7 @@ export async function retrieve(opts: {
 
   return top.map((t) => ({
     id: t.item.id,
+    revision: t.item.row.revision,
     kind: t.item.row.kind,
     content: t.item.content,
     importance: t.item.importance,
