@@ -1,22 +1,16 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { providerStatus } from "@/lib/ai/provider";
+import { diagnostics } from "@/lib/diagnostics";
 import { getProfile } from "@/lib/memory/profile";
 import { DemoButton } from "@/components/DemoButton";
 import { NameForm } from "@/components/NameForm";
+import { DiagnosticsPanel } from "@/components/settings/DiagnosticsPanel";
 import { db } from "@/lib/db";
 import { ACTIVE_MEMORY } from "@/lib/memory/consistency";
 
 export default async function Settings() {
-  const st = providerStatus();
   const profile = await getProfile();
-  const [entries, memories, letters] = await Promise.all([db.entry.count(), db.memory.count({ where: ACTIVE_MEMORY }), db.letter.count()]);
-  const rows: Array<[string, string | null, string]> = [
-    ["对话 / 写信", st.chat, "CHAT_*"],
-    ["看图", st.vision, "VISION_*"],
-    ["向量", st.embed, "EMBED_*"],
-    ["语音转写", st.asr, "ASR_*"],
-  ];
+  const [entries, memories, letters, diag] = await Promise.all([db.entry.count(), db.memory.count({ where: ACTIVE_MEMORY }), db.letter.count(), diagnostics()]);
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="font-hand text-3xl">设置</h1>
@@ -26,26 +20,7 @@ export default async function Settings() {
         <NameForm initial={profile.name} />
       </section>
 
-      <section className="card p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="font-hand text-xl">AI 模型</h2>
-          {st.mock ? <span className="chip !bg-gold/20 !text-ink">演示模式（Mock）</span> : <span className="chip !bg-post-soft !text-post">已连接</span>}
-        </div>
-        <p className="mt-2 text-xs leading-6 text-ink-3">
-          每个能力单独配置，全部走 OpenAI 兼容协议，在项目根目录的 <code>.env</code> 中修改后重启生效。未配置对话模型时自动进入演示模式：由本地规则抽取器、模板化写信器和文风指纹驱动，所有流程都可离线跑通。
-        </p>
-        <table className="mt-3 w-full text-sm">
-          <tbody>
-            {rows.map(([k, v, env]) => (
-              <tr key={k} className="border-t border-line">
-                <td className="py-2 text-ink-2">{k}</td>
-                <td className="py-2">{v ?? <span className="text-ink-3">未配置</span>}</td>
-                <td className="py-2 text-right font-mono text-[11px] text-ink-3">{env}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <DiagnosticsPanel initial={diag} />
 
       <section className="card p-5">
         <h2 className="font-hand text-xl">数据</h2>
