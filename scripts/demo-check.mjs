@@ -30,7 +30,7 @@ export function parseArgs(args) {
 }
 
 /** 严格要求完整done帧；处理跨chunk/CRLF/多行data，不打印任何载荷。 */
-export async function readSSE(response, route) {
+export async function readSSE(response, route, onEvent = () => {}) {
   check(response.headers.get("content-type")?.includes("text/event-stream") && response.body, route, "EXPECTED_SSE");
   const reader = response.body.getReader(), decoder = new TextDecoder();
   const events = []; let buffer = "", event = "message", data = [], terminal = false;
@@ -43,6 +43,7 @@ export async function readSSE(response, route) {
         if (event === "error") throw new DemoCheckError(route, codeOf(value?.code, "SSE_ERROR"));
         if (event === "done") terminal = true;
         events.push({ event, data: value });
+        onEvent({ event, data: value });
       }
       event = "message"; data = [];
     } else if (text.startsWith("event:")) event = text.slice(6).trim();
@@ -75,7 +76,7 @@ function newCalls(before, after, route) {
 export async function runDemoCheck(options, { fetcher = fetch, log = console.log, pause = (ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   check(options.yes, "CLI", "CONFIRMATION_REQUIRED");
   const results = []; let completedRuns = 0;
-  async function request(path, body, sse = false) {
+  async function request(path, body, sse = false, onEvent) {
     const headers = new Headers();
     const multipart = body instanceof FormData;
     if (body !== undefined && !multipart) headers.set("Content-Type", "application/json");
@@ -87,7 +88,7 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
         const error = await response.json().catch(() => null);
         throw new DemoCheckError(path, codeOf(error?.code, `HTTP_${response.status}`));
       }
-      if (sse) return await readSSE(response, path);
+      if (sse) return await readSSE(response, path, onEvent);
       return await response.json().catch(() => { throw new DemoCheckError(path, "INVALID_JSON"); });
     } catch (error) {
       if (error instanceof DemoCheckError) throw error;
@@ -129,6 +130,14 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
     check(state.status === "completed" && state.result?.entry?.interviewDone && state.result?.card && state.result?.memories?.length, route, "FINALIZE_INCOMPLETE");
     for (const stage of AI_STAGES) record(state.result.executions?.[stage], stage === "embed" ? "embed" : "chat");
   };
+  const finalizeMetrics = (label, stages) => {
+    const metrics = STAGES.map(name => {
+      const stage = stages?.find(s => s.stage === name && ["completed", "skipped"].includes(s.status));
+      check(Number.isFinite(stage?.durationMs) && stage.durationMs >= 0, "/api/entries/{id}/finalize", "MISSING_STAGE_TIMING");
+      return `${name}Ms=${stage.durationMs}`;
+    });
+    log(`[METRIC] ${label} ${metrics.join(" ")}`);
+  };
   const postmanExecutions = (result, record) => {
     check(Array.isArray(result.decisions) && result.decisions.every(d => d.outcome !== "failed" && d.outcome !== "selected"), "/api/postman", "POSTMAN_INCOMPLETE");
     for (const decision of result.decisions) for (const stage of decision.stages ?? []) if (stage.execution) record(stage.execution, stage.name === "retrieve" ? "embed" : "chat");
@@ -146,9 +155,11 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
       }, true);
       const exam = snapshot.memories.find(m => m.kind === "plan" && !m.resolved && /考试/.test(m.content) && m.dueAt);
       check(exam, "/api/export", "EXAM_PLAN_MISSING");
-      await step("巡检", "/api/postman", async record => { const result = await request("/api/postman", { action: "tick" }); postmanExecutions(result, record); });
+      const tick = await step("巡检", "/api/postman", async record => { const result = await request("/api/postman", { action: "tick" }); postmanExecutions(result, record); return result; });
       const forward = await step("快进7天（SSE）", "/api/postman", async record => {
+        const started = Date.now();
         const events = await request("/api/postman", { action: "forward", days: 7 }, true);
+        log(`[METRIC] forward.totalMs=${Date.now() - started}`);
         const result = events.find(e => e.event === "done")?.data?.result;
         postmanExecutions(result, record);
         for (const type of ["open_loop", "anniversary"]) check(result.decisions.some(d => d.type === type && d.outcome === "generated" && result.generated.includes(d.letterId)), "/api/postman", `MISSING_${type.toUpperCase()}_LETTER`);
@@ -161,6 +172,15 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
         const exported = await request("/api/export"); const letter = exported.letters.find(l => l.id === letterId);
         check(sources.letterId === letterId && Array.isArray(sources.sentences) && sources.sentences.map(s => s.text).join("") === letter?.body, "/api/letters/{id}/sources", "SOURCES_BODY_MISMATCH");
         check(sources.sentences.every(s => Array.isArray(s.sources) && s.sources.length <= 2), "/api/letters/{id}/sources", "INVALID_SOURCES");
+        const ids = new Set([...(tick.generated ?? []), ...forward.generated]);
+        const fresh = exported.letters.filter(l => ids.has(l.id));
+        check(fresh.length === ids.size, "/api/export", "GENERATED_LETTER_MISSING");
+        const counts = { passed: 0, rewritten: 0, failed: 0, unchecked: 0 };
+        for (const freshLetter of fresh) {
+          check(Object.hasOwn(counts, freshLetter.checkStatus), "/api/export", "INVALID_CHECK_STATUS");
+          counts[freshLetter.checkStatus]++;
+        }
+        log(`[METRIC] checks.generated=${fresh.length} ${Object.entries(counts).map(([key, count]) => `${key}=${count}`).join(" ")}`);
       });
       await step("回信关闭考试计划并完成整理", "/api/letters/{id}", async record => {
         const saved = await request(`/api/letters/${encodeURIComponent(letterId)}`, { action: "reply", reply: "UX设计认证考试考完了，过了！" });
@@ -170,6 +190,7 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
         const deadline = Date.now() + 600_000; let state;
         do { state = await request(route); if (["completed", "partial", "failed"].includes(state.status)) break; await pause(500); } while (Date.now() < deadline);
         check(state?.jobId === saved.jobId, route, "JOB_MISMATCH"); finalized(state, route, record);
+        finalizeMetrics("replyFinalize", state.stages);
         const exported = await request("/api/export"); check(exported.memories.some(m => m.id === exam.id && m.resolved), "/api/export", "PLAN_NOT_RESOLVED");
       }, true);
       const entryId = await step("新建文字日记", "/api/entries", async () => {
@@ -177,13 +198,19 @@ export async function runDemoCheck(options, { fetcher = fetch, log = console.log
         const saved = await request("/api/entries", form); check(saved.entry?.id, "/api/entries", "ENTRY_NOT_CREATED"); return saved.entry.id;
       });
       await step("追问（SSE）", "/api/entries/{id}/interview", async record => {
-        const events = await request(`/api/entries/${encodeURIComponent(entryId)}/interview`, {}, true);
+        const started = Date.now(); let firstDelta = false;
+        const events = await request(`/api/entries/${encodeURIComponent(entryId)}/interview`, {}, true, ({ event, data }) => {
+          if (!firstDelta && event === "delta" && typeof data === "string" && data.length) {
+            firstDelta = true; log(`[METRIC] interview.firstDeltaMs=${Date.now() - started}`);
+          }
+        });
         check(events.some(e => e.event === "delta" && typeof e.data === "string" && e.data.length), "/api/entries/{id}/interview", "EMPTY_INTERVIEW");
         record(events.find(e => e.event === "done")?.data?.execution);
       }, true);
       await step("收进邮局（SSE五阶段）", "/api/entries/{id}/finalize", async record => {
         const route = `/api/entries/${encodeURIComponent(entryId)}/finalize`, events = await request(route, {}, true);
         for (const stage of STAGES) check(events.some(e => e.event === "stage" && e.data.stage === stage && e.data.status === "completed"), route, `MISSING_STAGE_${stage.toUpperCase()}`);
+        finalizeMetrics("entryFinalize", events.filter(e => e.event === "stage").map(e => e.data));
         const done = events.find(e => e.event === "done")?.data; check(done?.result?.entry?.id === entryId, route, "ENTRY_MISMATCH"); finalized(done, route, record);
       }, true);
       await step("读取月度回忆", "/api/recap/{month}", async () => {

@@ -253,6 +253,6 @@ export async function getFinalizeStatus(entryId: string): Promise<FinalizeStatus
 }
 
 /** 删除记录时一并删除它的任务：任务检查点里有抽取结果和卡片内容，不能在记录删掉后残留。 */
-export function deleteEntryJobs(entryId: string) {
-  return db.job.deleteMany({ where: { kind: "finalize", targetId: entryId } });
+export function deleteEntryJobs(entryId: string, client: Prisma.TransactionClient = db) {
+  return client.job.deleteMany({ where: { kind: "finalize", targetId: entryId } });
 }

@@ -4,6 +4,7 @@ const modulePath = "../scripts/demo-check.mjs";
 const { main, parseArgs, readSSE } = await import(modulePath);
 const frame = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 const stream = (frames: string) => new Response(frames, { headers: { "Content-Type": "text/event-stream" } });
+const timings = ["extract", "embed", "persist", "profile", "story"].map((stage, index) => ({ stage, status: "completed", durationMs: (index + 1) * 10 }));
 
 it("未带--yes只打印说明，既不发请求也不清数据", async () => {
   const fetcher = vi.fn(), log = vi.fn(); expect(await main([], { fetcher, log })).toBe(0); expect(fetcher).not.toHaveBeenCalled();
@@ -42,7 +43,7 @@ function server(mode: "remote" | "mock" | "fallback" = "mock", broken: "none" | 
     const path = new URL(url).pathname;
     if (path === "/api/diagnostics") return Response.json({ db: { ok: true }, recent: calls, clockOffsetDays: offset, capabilities: [{ role: "embed", configured: embedding === "remote" || embedding === "fallback", ...(embedding !== "unconfigured" ? { model: embedding === "lite" ? "lite" : "test-embed" } : {}) }] });
     if (path === "/api/demo") { loads++; resolved = false; offset = 0; record("embed"); return Response.json({ ok: true, entries: 1, letters: 1 }); }
-    if (path === "/api/export") return Response.json({ entries: [{ id: "entry", occurredAt: "2026-08-09T12:00:00Z" }], memories: [{ id: "exam", kind: "plan", content: "认证考试", dueAt: "2026-11-07T12:00:00Z", resolved }], letters: [{ id: "letter", body: "信件正文。" }] });
+    if (path === "/api/export") return Response.json({ entries: [{ id: "entry", occurredAt: "2026-08-09T12:00:00Z" }], memories: [{ id: "exam", kind: "plan", content: "认证考试", dueAt: "2026-11-07T12:00:00Z", resolved }], letters: [{ id: "seed", body: "private seed", checkStatus: "unchecked" }, { id: "letter", body: "信件正文。", checkStatus: "passed" }, { id: "anniversary", body: "private letter", checkStatus: "rewritten" }] });
     if (path === "/api/postman") {
       const input = JSON.parse(String(init.body));
       if (input.action === "reset") { resets++; offset = 0; return Response.json({ ok: true }); }
@@ -53,10 +54,10 @@ function server(mode: "remote" | "mock" | "fallback" = "mock", broken: "none" | 
     }
     if (path === "/api/letters/letter/sources") return Response.json({ letterId: "letter", sentences: [{ text: "信件正文。", sources: [] }] });
     if (path === "/api/letters/letter") { record(); resolved = true; return Response.json({ resolvedPlanIds: ["exam"], replyEntryId: "reply", jobId: "job", execution: info }); }
-    if (path === "/api/entries/reply/finalize") return Response.json({ jobId: "job", status: "completed", result: result("reply") });
+    if (path === "/api/entries/reply/finalize") return Response.json({ jobId: "job", status: "completed", stages: timings, result: result("reply") });
     if (path === "/api/entries") return Response.json({ entry: { id: "new" } });
-    if (path === "/api/entries/new/interview") { record(); return stream(frame("delta", "private diary") + (broken === "interview" ? "" : frame("done", { execution: info }))); }
-    if (path === "/api/entries/new/finalize") { record(); return stream(["extract", "embed", "persist", "profile", "story"].filter(stage => broken !== stage).map(stage => frame("stage", { stage, status: "completed" })).join("") + frame("done", { status: "completed", result: result("new") })); }
+    if (path === "/api/entries/new/interview") { record(); return stream(frame("heartbeat", {}) + frame("delta", "") + frame("delta", "private diary") + frame("delta", "more private text") + (broken === "interview" ? "" : frame("done", { execution: info }))); }
+    if (path === "/api/entries/new/finalize") { record(); return stream(timings.filter(s => broken !== s.stage).map(s => frame("stage", s)).join("") + frame("done", { status: "completed", result: result("new") })); }
     if (path === "/api/recap/2026-08") { record(); return Response.json({ recap: { month: "2026-08", stats: { count: 1 }, narrative: "private narrative" } }); }
     throw new Error("unexpected interface with private details");
   });
@@ -66,6 +67,22 @@ it("完整两轮只走HTTP，每轮重载与复位且不打印正文", async () 
   const fake = server(), log = vi.fn(); expect(await main(["--yes", "--runs", "2"], { fetcher: fake.fetcher, log })).toBe(0);
   expect(fake.counts()).toMatchObject({ loads: 2, resets: 2, resolved: true, offset: 0 });
   const output = log.mock.calls.join("\n"); expect(output).toContain("runs=2/2 steps=20/20 result=PASS"); expect(output).not.toContain("private");
+  expect(output.match(/interview.firstDeltaMs=/g)).toHaveLength(2);
+  expect(output.match(/checks.generated=2 passed=1 rewritten=1 failed=0 unchecked=0/g)).toHaveLength(2);
+  expect(output).toContain("[METRIC] entryFinalize extractMs=10 embedMs=20 persistMs=30 profileMs=40 storyMs=50");
+  expect(output).toContain("[METRIC] replyFinalize extractMs=10 embedMs=20 persistMs=30 profileMs=40 storyMs=50");
+});
+it("SSE计时回调在首段到达时执行，不等done或响应关闭", async () => {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const onEvent = vi.fn();
+  const response = new Response(new ReadableStream({ start(c) { controller = c; } }), { headers: { "Content-Type": "text/event-stream" } });
+  let complete = false;
+  const pending = readSSE(response, "/api/test", onEvent).then((value: unknown) => { complete = true; return value; });
+  controller.enqueue(new TextEncoder().encode(frame("delta", "private first word")));
+  await vi.waitFor(() => expect(onEvent).toHaveBeenCalledTimes(1));
+  expect(complete).toBe(false);
+  controller.enqueue(new TextEncoder().encode(frame("done", {}))); controller.close(); await pending;
+  expect(onEvent).toHaveBeenCalledTimes(2);
 });
 it.each(["mock", "fallback"] as const)("--real允许lite载入，遇到首个聊天类%s失败且尝试复位", async mode => {
   const fake = server(mode), log = vi.fn(); expect(await main(["--yes", "--real"], { fetcher: fake.fetcher, log })).toBe(1);
