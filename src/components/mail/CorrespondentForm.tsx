@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/DateInput";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
@@ -66,18 +67,17 @@ export function CorrespondentForm({ today, onCreated }: { today: string; onCreat
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="那是什么时候（可选）">
-              <input type="date" className="input" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
+              <DateInput aria-label="日期" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
             </Field>
             <Field label="TA 说话的样子（可选）">
               <input className="input" placeholder="例如：话不多，爱开玩笑" value={voice} onChange={(e) => setVoice(e.target.value)} />
             </Field>
           </div>
-          <p className="text-xs leading-5 text-ink-3">回信由 agent 以 TA 的身份代笔。TA 只会知道你们之间的信、那个瞬间，以及小局判断 TA 本来就会知道的事。</p>
         </>
       ) : (
         <>
           <Field label="分岔点：那是哪一天">
-            <input type="date" className="input" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
+            <DateInput aria-label="日期" max={max} value={momentAt} onChange={(e) => setMomentAt(e.target.value)} />
           </Field>
           <Field label="当时如果……">
             <textarea className="input min-h-[80px]" placeholder="例如：如果当时没有辞职来杭州，而是留在老家考了公务员" value={moment} onChange={(e) => setMoment(e.target.value)} />
@@ -85,7 +85,6 @@ export function CorrespondentForm({ today, onCreated }: { today: string; onCreat
           <Field label="怎么称呼 TA（可选）">
             <input className="input" placeholder="例如：留在老家的我" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <p className="text-xs leading-5 text-ink-3">回信由 agent 代笔。TA 只记得分岔点之前的真实经历，之后的人生是另一种可能。</p>
         </>
       )}
       <div className="flex justify-end">

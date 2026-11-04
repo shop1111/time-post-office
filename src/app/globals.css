@@ -98,6 +98,12 @@ body {
   line-height: 36px;
 }
 
+/* 编辑框从首行开始铺线，文字与横线一起滚动。 */
+textarea.letter-paper {
+  padding-block: 0;
+  background-position: 0 0;
+}
+
 /* 航空信封边 */
 .airmail {
   background: repeating-linear-gradient(135deg, var(--stamp) 0 14px, var(--card) 14px 24px, var(--post) 24px 38px, var(--card) 38px 48px);

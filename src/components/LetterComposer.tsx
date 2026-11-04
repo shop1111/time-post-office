@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/DateInput";
 import { XiaojuImage } from "@/components/XiaojuImage";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -25,9 +26,14 @@ export interface Recipient {
 const toDateInput = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const cnDate = (d: Date) => `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 
-/** 写一封信：先选收件人。写给未来的自己要选送达日；写给其他人，TA 会在一天之内回信 */
+/** 默认展开写给未来自己的信，也支持通过链接指定收件人。 */
 export function LetterComposer({ today, recipients, initialTo }: { today: string; recipients: Recipient[]; initialTo?: string }) {
-  const [to, setTo] = useState(initialTo && recipients.some((r) => r.id === initialTo) ? initialTo : "");
+  const [to, setTo] = useState(() =>
+    recipients.find((r) => r.id === initialTo)?.id
+    ?? recipients.find((r) => r.kind === "future_self")?.id
+    ?? recipients[0]?.id
+    ?? "",
+  );
   const [adding, setAdding] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -77,11 +83,19 @@ export function LetterComposer({ today, recipients, initialTo }: { today: string
         <div className="mb-2 text-sm text-ink-2">写给谁</div>
         <div className="flex flex-wrap gap-2">
           {recipients.map((r) => (
-            <button key={r.id} onClick={() => setTo(r.id)} className={cn("chip !py-1.5", to === r.id && "!border-stamp !bg-stamp-soft !text-stamp")}>
+            <button
+              key={r.id}
+              onClick={() => {
+                setTo(r.id);
+                setAdding(false);
+              }}
+              aria-pressed={!adding && to === r.id}
+              className={cn("chip !py-1.5", !adding && to === r.id && "!border-stamp !bg-stamp-soft !text-stamp")}
+            >
               {r.kind === "curator" ? "📮" : r.kind === "future_self" ? "💌" : r.kind === "parallel_self" ? "🪐" : "✉️"} {r.name}
             </button>
           ))}
-          <button onClick={() => setAdding((a) => !a)} className={cn("chip !py-1.5", adding && "!border-stamp !text-stamp")}>
+          <button onClick={() => setAdding((a) => !a)} aria-expanded={adding} className={cn("chip !py-1.5", adding && "!border-stamp !bg-stamp-soft !text-stamp")}>
             <Plus size={13} /> 新收件人
           </button>
         </div>
@@ -99,7 +113,7 @@ export function LetterComposer({ today, recipients, initialTo }: { today: string
         )}
       </div>
 
-      {target && (
+      {!adding && target && (
         <div className={cn("card overflow-hidden transition", sent && "opacity-30")}>
           <div className="airmail h-1.5" />
           <div className="p-5">
@@ -110,12 +124,14 @@ export function LetterComposer({ today, recipients, initialTo }: { today: string
               </div>
             )}
             <input
+              aria-label="信的标题"
               className="w-full bg-transparent font-hand text-xl outline-none placeholder:text-ink-3"
               placeholder={future ? "信的标题，例如：给一年后的自己" : `信的标题，例如：写给${who}`}
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
             />
             <textarea
+              aria-label="信的正文"
               className="letter-paper mt-3 min-h-[216px] w-full resize-y rounded-lg px-3 font-hand text-lg outline-none"
               placeholder={
                 future
@@ -145,7 +161,7 @@ export function LetterComposer({ today, recipients, initialTo }: { today: string
                       {p.label}
                     </button>
                   ))}
-                  <input type="date" className="input !w-auto !py-1 text-sm" min={toDateInput(tomorrow)} value={custom} onChange={(e) => setCustom(e.target.value)} aria-label="自定义送达日期" />
+                  <DateInput className="w-48 text-sm [&_.input]:py-1" min={toDateInput(tomorrow)} value={custom} onChange={(e) => setCustom(e.target.value)} aria-label="自定义送达日期" />
                   <span className="text-xs text-ink-3">（{cnDate(when)} 送达）</span>
                 </>
               ) : (
