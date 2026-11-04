@@ -7,8 +7,6 @@ import { getLocalModel, type Role, type RoleConfig } from "./local-settings";
 export type { Role } from "./local-settings";
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export interface CallOptions {
-  /** 对话核心失败时直接报错，避免模板冒充真实回答。其他业务保留原行为。 */
-  fallbackPolicy?: "local" | "error";
   onExecution?: (execution: ExecutionInfo) => void;
   /** 可缩短配置预算；JSON修复共享剩余预算。 */
   timeoutMs?: number;
@@ -76,7 +74,6 @@ async function run<T>(role: Role, cfg: RoleConfig | null, options: CallOptions, 
   let value: T;
   let info: ExecutionInfo;
   if (!cfg) {
-    if (options.fallbackPolicy === "error") throw new AiFailure("not_configured");
     value = mock();
     info = execution("mock", started, role === "embed" ? "lite" : undefined, "not_configured");
   } else {
@@ -85,7 +82,6 @@ async function run<T>(role: Role, cfg: RoleConfig | null, options: CallOptions, 
       value = await remote(cfg, budget);
       info = execution("remote", started, cfg.model);
     } catch (error) {
-      if (options.fallbackPolicy === "error") throw error;
       const reason = failureOf(error).reason;
       console.warn(`[ai.${role}] fallback ${reason}`);
       value = mock();
@@ -113,7 +109,6 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
   const started = Date.now();
   const cfg = roleConfig("chat");
   if (!cfg) {
-    if (opts.fallbackPolicy === "error") throw new AiFailure("not_configured");
     yield* fakeStream(opts.mock());
     opts.onExecution?.(execution("mock", started, undefined, "not_configured"));
     return;
@@ -190,7 +185,7 @@ export async function* chatStream(messages: ChatMessage[], opts: ChatOptions): A
   finally { budget.dispose(); }
   if (failure) {
     console.warn(`[ai.stream] ${emitted ? "interrupted" : "fallback"} ${failure.reason}`);
-    if (emitted || opts.fallbackPolicy === "error") {
+    if (emitted) {
       const info = execution("remote", started, cfg.model, failure.reason);
       opts.onExecution?.(info);
       throw new ChatStreamError(failure.reason, failure.retryable, info);

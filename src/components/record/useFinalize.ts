@@ -21,7 +21,7 @@ type Queued =
   | { kind: "error"; data: FinalizeErrorEvent };
 
 // Mock 模式下五个阶段几毫秒就跑完。每一步至少停留这么久，让人看得清；显示的耗时始终是后端给的真实值。
-const STEP_MS = 0;
+const STEP_MS = 320;
 const POLL_MS = 1000;
 const POLL_GIVE_UP = 30;
 
