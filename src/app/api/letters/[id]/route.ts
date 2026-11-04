@@ -22,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const reply = input.reply.trim();
     // loop:memoryId 是这封信真正追问的目标；其他引用可能只是补充背景，不能一并关闭。
     const ids = original.triggerKey?.startsWith("loop:") ? [original.triggerKey.slice(5)] : parseJson<string[]>(original.citedMemoryIds, []);
-    const plans = original.triggerType === "open_loop" ? await db.memory.findMany({ where: { id: { in: ids }, kind: "plan", resolved: false, ...ACTIVE_MEMORY }, select: { id: true, content: true } }) : [];
+    const plans = original.triggerType === "open_loop" ? await db.memory.findMany({ where: { id: { in: ids }, kind: "plan", resolved: false, ...ACTIVE_MEMORY, userEdited: false }, select: { id: true, content: true, revision: true } }) : [];
     let execution: ExecutionInfo | undefined;
     const answered = await judgeReply(plans, reply, { onExecution: (info) => { execution = info; } });
     const saved = await db.$transaction(async (tx) => {
@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const resolvedPlanIds: string[] = [];
       for (const plan of plans.filter((plan) => answered.includes(plan.id))) {
         // 判断期间若原计划被人工修改，不用旧判断去关闭新内容。
-        const result = await tx.memory.updateMany({ where: { id: plan.id, content: plan.content, kind: "plan", resolved: false }, data: { resolved: true } });
+        const result = await tx.memory.updateMany({ where: { id: plan.id, content: plan.content, kind: "plan", resolved: false, ...ACTIVE_MEMORY, userEdited: false, revision: plan.revision }, data: { resolved: true } });
         if (result.count) resolvedPlanIds.push(plan.id);
       }
       const entry = await tx.entry.create({ data: {
